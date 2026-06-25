@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useSettings } from "@/lib/useSettings";
 import { getBooks, type BookRef } from "@/lib/bible";
-import { CHAPTER_COUNTS } from "@/lib/readingPlan";
+import { CHAPTER_COUNTS } from "@/lib/chapterPlan";
 import { ConfirmDialog } from "./ConfirmDialog";
 
 const ADDIS = "Africa/Addis_Ababa";
