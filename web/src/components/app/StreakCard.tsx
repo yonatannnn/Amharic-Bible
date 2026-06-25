@@ -77,7 +77,7 @@ export function StreakCard({
           <RestoreRow
             friendshipId={friendshipId}
             restores={streak?.restores_remaining ?? 0}
-            streakValue={broken ? count : restorableCount}
+            streakValue={restorableCount > 0 ? restorableCount : count}
           />
         ) : (
           <div className="mb-4 flex items-center justify-center gap-3 text-sm">
