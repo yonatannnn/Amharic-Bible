@@ -47,7 +47,8 @@ async function getAccessToken(sa: ServiceAccount): Promise<string> {
   return (await res.json()).access_token;
 }
 
-const BIBLE_API = "https://faithful-marni-anatoli-b7663357.koyeb.app";
+// Static Bible JSON bundled with the web app (same source as web + mobile).
+const BIBLE_STATIC = "https://amharic-bible-eta.vercel.app/bible";
 const FALLBACK_REFS = [
   { book: 43, chapter: 3, verse: 16 },
   { book: 19, chapter: 23, verse: 1 },
@@ -56,7 +57,7 @@ const FALLBACK_REFS = [
 
 async function tryRef(book: number, chapter: number, verse: number): Promise<{ ref: string; text: string } | null> {
   try {
-    const res = await fetch(`${BIBLE_API}/book/${book}`);
+    const res = await fetch(`${BIBLE_STATIC}/${String(book).padStart(2, "0")}.json`);
     const b = await res.json();
     const text = b.chapters?.[chapter - 1]?.verses?.[verse - 1];
     if (text) return { ref: `${b.title ?? "Book " + book} ${chapter}:${verse}`, text };

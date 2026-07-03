@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
-const nextConfig: NextConfig = {
-  /* config options here */
-};
+// Bible text is served from the bundled statics in /public/bible —
+// no external content API, so no proxy rewrites are needed.
+const nextConfig: NextConfig = {};
 
 export default nextConfig;
