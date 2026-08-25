@@ -11,6 +11,7 @@
 import { getChapter, type Chapter } from "@/lib/bible";
 import { BOOK_IDS, BOOK_NAMES } from "@/lib/bibleCanon";
 import { todayInAddis, ethiopianLabel, type EthiopianDate } from "@/lib/ethiopic";
+import GITSAWE_DATA from "../../public/gitsawe/gitsawe.json";
 
 export type Ref = {
   book: string;          // canon id, e.g. "JHN"
@@ -54,35 +55,18 @@ export const SLOT_LABELS: Record<QidaseSlot, string> = {
   other: "ተጨማሪ",
 };
 
-let cache: Record<string, GitsaweDay> | null = null;
+// Imported, not read from disk and not fetched.
+//
+// `public/` is served by the CDN but is NOT traced into the serverless bundle,
+// so reading it with fs works under `next start` and silently fails on Vercel —
+// which is exactly how this card disappeared in production. Fetching our own
+// origin would work but adds a network hop to every render. An import is
+// resolved at build time and is correct in both places.
+//
+// Safe for bundle size: this module is only ever imported by server code, and
+// GitsaweCard takes its types with `import type`, which is erased.
 
-/**
- * On the server the file is read straight off disk — it is a build-time static
- * asset, so fetching our own origin for it would add a network hop and, worse,
- * point at the deployed site rather than this process. In the browser it is a
- * normal same-origin request the CDN can cache.
- */
-async function load(): Promise<Record<string, GitsaweDay>> {
-  if (cache) return cache;
-  let doc: { days: Record<string, GitsaweDay> };
-  if (typeof window === "undefined") {
-    const [{ readFile }, { join }] = await Promise.all([
-      import("fs/promises"),
-      import("path"),
-    ]);
-    const raw = await readFile(
-      join(process.cwd(), "public", "gitsawe", "gitsawe.json"),
-      "utf8",
-    );
-    doc = JSON.parse(raw);
-  } else {
-    const res = await fetch("/gitsawe/gitsawe.json");
-    if (!res.ok) throw new Error(`gitsawe: ${res.status}`);
-    doc = await res.json();
-  }
-  cache = doc.days;
-  return cache;
-}
+const days = (GITSAWE_DATA as unknown as { days: Record<string, GitsaweDay> }).days;
 
 const key = (e: { month: number; day: number }) =>
   `${String(e.month).padStart(2, "0")}-${String(e.day).padStart(2, "0")}`;
@@ -159,12 +143,6 @@ const SLOT_ORDER: QidaseSlot[] = ["gospel", "pauline", "catholic", "acts", "misb
 /** Everything the home card needs for today. */
 export async function getTodaysGitsawe(when?: EthiopianDate): Promise<TodaysGitsawe | null> {
   const date = when ?? todayInAddis();
-  let days: Record<string, GitsaweDay>;
-  try {
-    days = await load();
-  } catch {
-    return null;
-  }
   const day = days[key(date)];
   if (!day) return null;
 
