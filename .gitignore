@@ -1,0 +1,20 @@
+# build output and caches
+node_modules/
+.next/
+dist/
+build/
+.dart_tool/
+.idea/
+*.iml
+
+# secrets
+.env
+.env.*
+!.env*.example
+
+# local DB backups (contain user data)
+backups/
+
+# nested repos keep their own history
+web/
+amharic-bible-api/

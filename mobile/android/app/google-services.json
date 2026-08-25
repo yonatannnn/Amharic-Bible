@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "671458621360",
+    "project_id": "amharic-bible-a1e39",
+    "storage_bucket": "amharic-bible-a1e39.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:671458621360:android:d886545c1c298ecd62c875",
+        "android_client_info": {
+          "package_name": "com.amharicbible.amharic_bible"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDftYH6w8Gghr3FtGMEhdbtgDif7NVF5GY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
