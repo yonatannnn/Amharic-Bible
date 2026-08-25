@@ -1,11 +1,54 @@
 /**
  * Bible text client — reads the static JSON bundled with this app in
- * /public/bible (one file per book, 01–66, plus 00.json = book-name index).
- * The text ships with the deployment; there is no external content API,
- * so no CORS proxy, cold starts, or third-party outages.
+ * /public/bible (one file per book, 01–89, plus 00.json = book-name index and
+ * manifest.json = canon metadata). Regenerate with scripts/build-bible.mjs.
+ *
+ * The edition is the EOTC 81-book canon (am-2000). Book numbers 1–66 mean
+ * exactly what they always did, so stored references stay valid; the
+ * deuterocanonical books are 67–89. Psalms use LXX numbering — see
+ * scripts/psalms-mt-to-lxx.sql.
  */
+import { BOOK_COUNT, BOOK_IDS } from "@/lib/bibleCanon";
 
-export type BookRef = { num: number; name: string };
+/**
+ * Table of contents of the printed am-2000 "ሰማንያ አሐዱ" edition, in the order it
+ * is printed. Books the edition does not print (Josippon and the 8 extra NT
+ * books) are deliberately absent: the reader shows exactly what the printed
+ * Bible shows.
+ *
+ * Kept identical to `_printOld`/`_printNew` in
+ * mobile/lib/services/bible.dart — the two readers must agree.
+ */
+const PRINT_OLD = [
+  "GEN", "EXO", "LEV", "NUM", "DEU", "JOS", "JDG", "RUT", "1SA", "2SA",
+  "1KI", "2KI", "1CH", "2CH", "JUB", "ENO", "EZR", "NEH", "1ES", "2ES",
+  "TOB", "JDT", "EST", "1MA", "2MA", "3MA", "JOB", "PSA", "PRO", "4MA",
+  "WIS", "ECC", "SNG", "SIR", "ISA", "JER",
+  "1BA", // መጽሐፈ ባሮክ (1 Baruch), supplied from am-1980 — see build-bible.mjs
+  "LAM", "LJE", "BAR", // the BAR file is really ተረፈ ባሮክ, see NAME_OVERRIDE
+  "EZK", "DAN", "HOS", "AMO", "MIC", "JOL", "OBA", "JON", "NAM", "HAB",
+  "ZEP", "HAG", "ZEC", "MAL",
+] as const;
+
+const PRINT_NEW = [
+  "MAT", "MRK", "LUK", "JHN", "ACT", "ROM", "1CO", "2CO", "GAL", "EPH",
+  "PHP", "COL", "1TH", "2TH", "1TI", "2TI", "TIT", "PHM", "HEB",
+  "1PE", "2PE", "1JN", "2JN", "3JN", "JAS", "JUD", "REV",
+] as const;
+
+/**
+ * The dataset's "BAR" file actually holds ተረፈ ባሮክ (Paralipomena of Jeremiah),
+ * not 1 Baruch. Label it truthfully.
+ */
+const NAME_OVERRIDE: Record<string, string> = { BAR: "ተረፈ ባሮክ" };
+
+const numForId = (id: string) => BOOK_IDS.indexOf(id) + 1;
+
+export type BookRef = {
+  num: number;          // file number in the bundle — stable, stored in the DB
+  name: string;
+  testament?: "old" | "new";
+};
 
 export type Verse = string;
 
@@ -54,15 +97,36 @@ async function get<T>(file: string): Promise<T> {
   throw lastErr instanceof Error ? lastErr : new Error(`bible ${file} failed`);
 }
 
-/** All 66 books as { num, name }, from the bundled index (00.json). */
+/**
+ * The books the reader offers, in printed order — not every file in the bundle.
+ * Numbers stay the file numbers, because those are what the database stores.
+ */
 export async function getBooks(): Promise<BookRef[]> {
   if (indexCache) return indexCache;
   const idx = await get<Record<string, string>>("00.json");
-  indexCache = Object.entries(idx)
-    .map(([k, name]) => ({ num: parseInt(k, 10), name: name.trim() }))
-    .filter((b) => Number.isInteger(b.num) && b.num >= 1 && b.num <= 66)
-    .sort((a, b) => a.num - b.num);
+  const nameFor = (num: number) => (idx[String(num).padStart(2, "0")] ?? "").trim();
+
+  const list: BookRef[] = [];
+  for (const [ids, testament] of [
+    [PRINT_OLD, "old" as const],
+    [PRINT_NEW, "new" as const],
+  ] as const) {
+    for (const id of ids) {
+      const num = numForId(id);
+      if (num < 1 || num > BOOK_COUNT) continue;      // edition lacks this book
+      const name = NAME_OVERRIDE[id] ?? nameFor(num);
+      if (name) list.push({ num, name, testament });
+    }
+  }
+  indexCache = list;
   return indexCache;
+}
+
+/** Name for a book number, including books the printed list omits. */
+export async function bookName(num: number): Promise<string> {
+  const idx = await get<Record<string, string>>("00.json");
+  const id = BOOK_IDS[num - 1];
+  return NAME_OVERRIDE[id] ?? (idx[String(num).padStart(2, "0")] ?? "").trim();
 }
 
 /** A whole book (all chapters + verses). */

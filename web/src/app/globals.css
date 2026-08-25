@@ -1,26 +1,165 @@
 @import "tailwindcss";
 
+/* dark mode driven by [data-theme="dark"] on <html> */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* ===== Illuminated Devotional — warm parchment, garnet + gold ===== */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --canvas: #f4ede0;
+  --surface: #fffdf8;
+  --surface-2: #ece2cf;
+  --line: #e0d4bd;
+  --ink: #2a2018;
+  --ink-soft: #6a5b49;
+  --ink-faint: #9c8a72;
+  --brand: #97233a;          /* liturgical garnet */
+  --brand-2: #b8324c;
+  --brand-soft: #f3e2dd;
+  --brand-ink: #fffaf4;
+  --gold: #b9892f;           /* manuscript gold */
+  --gold-soft: #f6e7bf;
+  --highlight: #f7e3a1;
+  --good: #4f7a3f;           /* olive green */
+  --warn: #c4781f;
+  --ember: #d2691e;
+  --shadow: 0 1px 2px rgb(74 52 30 / 0.06), 0 6px 20px -8px rgb(74 52 30 / 0.18);
+  --shadow-lg: 0 24px 60px -18px rgb(60 40 20 / 0.35);
+
+  --reader-font: var(--font-eth-serif);
+  --reader-size: 16px;
+  --reader-leading: 2;
+}
+
+[data-theme="dark"] {
+  --canvas: #161009;
+  --surface: #211910;
+  --surface-2: #2c2114;
+  --line: #3a2c1b;
+  --ink: #f1e7d6;
+  --ink-soft: #c3b29a;
+  --ink-faint: #8c7a62;
+  --brand: #e07189;
+  --brand-2: #ec8aa0;
+  --brand-soft: #3a1f23;
+  --brand-ink: #1a0d10;
+  --gold: #e0b85f;
+  --gold-soft: #3a2f17;
+  --highlight: #5c4a1c;
+  --good: #8fb070;
+  --warn: #d99a4a;
+  --ember: #e08a3e;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-lg: 0 24px 60px -18px rgb(0 0 0 / 0.6);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--line);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-ink-faint: var(--ink-faint);
+  --color-brand: var(--brand);
+  --color-brand-2: var(--brand-2);
+  --color-brand-soft: var(--brand-soft);
+  --color-brand-ink: var(--brand-ink);
+  --color-gold: var(--gold);
+  --color-gold-soft: var(--gold-soft);
+  --color-highlight: var(--highlight);
+  --color-good: var(--good);
+  --color-warn: var(--warn);
+  --color-ember: var(--ember);
+
+  --font-sans: var(--font-hanken), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-display), Georgia, "Times New Roman", serif;
+  --font-eth: var(--font-eth-sans);
+  --font-eth-serif: var(--font-eth-serif);
+
+  --shadow-card: var(--shadow);
+  --shadow-pop: var(--shadow-lg);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  background-color: var(--canvas);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-hanken), "Noto Sans Ethiopic", system-ui, sans-serif;
+  /* warm atmospheric wash + faint paper grain */
+  background-color: var(--canvas);
+  background-image:
+    radial-gradient(900px 500px at 12% -8%, color-mix(in srgb, var(--gold) 14%, transparent), transparent 70%),
+    radial-gradient(820px 520px at 105% 0%, color-mix(in srgb, var(--brand) 12%, transparent), transparent 65%);
+  background-attachment: fixed;
+}
+
+.amharic {
+  font-family: var(--reader-font);
+}
+.reader-text {
+  font-family: var(--reader-font);
+  font-size: var(--reader-size);
+  line-height: var(--reader-leading);
+}
+.font-display {
+  font-family: var(--font-display);
+}
+
+/* scrollbars */
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 6px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--ink-faint);
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid var(--line);
+  border-top-color: var(--brand);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+/* staggered page-load reveal */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.rise {
+  animation: rise 0.62s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .rise {
+    animation: none;
+  }
+}
+
+/* a thin gold rule used as a decorative divider */
+.gold-rule {
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    transparent,
+    color-mix(in srgb, var(--gold) 60%, transparent),
+    transparent
+  );
 }

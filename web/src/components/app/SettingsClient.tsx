@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useSettings } from "@/lib/useSettings";
 import { getBooks, type BookRef } from "@/lib/bible";
-import { CHAPTER_COUNTS } from "@/lib/chapterPlan";
+import { CHAPTER_COUNTS, PLAN_BOOK_COUNT } from "@/lib/chapterPlan";
 import { ConfirmDialog } from "./ConfirmDialog";
 
 const ADDIS = "Africa/Addis_Ababa";
@@ -85,7 +85,7 @@ export function SettingsClient({
     book: number;
     chapter: number;
   }) {
-    const book = Math.min(Math.max(1, next.book), 66);
+    const book = Math.min(Math.max(1, next.book), PLAN_BOOK_COUNT);
     const chapter = Math.min(
       Math.max(1, next.chapter),
       CHAPTER_COUNTS[book - 1],
@@ -227,7 +227,7 @@ export function SettingsClient({
                 onChange={(e) => changeStartBook(+e.target.value)}
                 className="flex-1 rounded-xl border border-line bg-surface-2 px-4 py-3 text-sm outline-none focus:border-brand"
               >
-                {Array.from({ length: 66 }, (_, i) => i + 1).map((n) => (
+                {Array.from({ length: PLAN_BOOK_COUNT }, (_, i) => i + 1).map((n) => (
                   <option key={n} value={n}>
                     {books.find((b) => b.num === n)?.name ?? `Book ${n}`}
                   </option>
