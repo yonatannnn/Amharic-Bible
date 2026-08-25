@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { getBook } from "@/lib/bible";
 import { BOOK_COUNT } from "@/lib/bibleCanon";
+import { refMtToLxx } from "@/lib/psalms";
 import { getCurrentProfile } from "@/lib/profile";
 import { generateJSON } from "@/lib/gemini";
 import { type Pick, consecutivePick } from "@/lib/chapterPlan";
@@ -72,6 +73,7 @@ const CHAPTER_SCHEMA = {
 async function validate(p: Pick): Promise<Pick | null> {
   if (!Number.isInteger(p.book) || p.book < 1 || p.book > BOOK_COUNT || p.chapter < 1)
     return null;
+  p = refMtToLxx(p);
   try {
     const b = await getBook(p.book);
     const chapter = Math.min(Math.max(1, p.chapter), b.chapters.length);
@@ -105,8 +107,8 @@ Rules:
 - STRONGLY favour the New Testament (book numbers 40-66) — about 70% of the time choose
   a chapter from the Gospels (Matthew=40, Mark=41, Luke=42, John=43), Acts (44), or the
   Epistles (45-65). Otherwise pick a well-loved Old Testament chapter (Psalms=19,
-  Proverbs=20, Isaiah=23, Genesis=1). Psalms use SEPTUAGINT numbering (one lower
-  than the Protestant number for Psalms 10-146).
+  Proverbs=20, Isaiah=23, Genesis=1). Use the ordinary Protestant psalm
+  numbers you know; they are converted afterwards.
 - Choose from DIFFERENT places across the Bible day to day — do NOT be sequential.
 - Do NOT pick any of these recently used chapters: ${recent.join(", ") || "none"}.
 Return {"book":<1-89>,"chapter":<int>}.`,

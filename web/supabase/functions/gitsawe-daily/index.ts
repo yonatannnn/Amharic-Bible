@@ -3,7 +3,11 @@
 // Deploy:  supabase functions deploy gitsawe-daily --no-verify-jwt
 // Secrets: GITSAWE_BOT_TOKEN, CRON_SECRET
 //
-// Body {} → today. Body {month, day} → that Ethiopian day (for testing).
+// Body {}                 → today, to every active subscriber (the cron).
+// Body {month, day}        → that Ethiopian day instead of today.
+// Body {chat_id: 12345}    → send to ONLY that chat. Use this for testing:
+//                            everyone else should hear from the bot once a
+//                            day, at its hour, not whenever a test runs.
 
 import { serviceClient, authorize } from "../_shared/auth.ts";
 import { todaysGitsawe, SLOT_LABELS, type Verse } from "../_shared/gitsawe.ts";
@@ -126,8 +130,12 @@ Deno.serve(async (req) => {
       ? { inline_keyboard: [[{ text: "📤 አጋራ", url: shareUrl }]] }
       : undefined;
 
-    const { data: subs } = await supabase
-      .from("gitsawe_subscribers").select("chat_id").eq("active", true);
+    // A test send targets one chat; the cron sends to everyone active.
+    const only = body.chat_id ? Number(body.chat_id) : null;
+    const { data: subs } = only
+      ? { data: [{ chat_id: only }] }
+      : await supabase
+          .from("gitsawe_subscribers").select("chat_id").eq("active", true);
 
     let sent = 0, dropped = 0;
     for (const s of subs ?? []) {
@@ -154,7 +162,10 @@ Deno.serve(async (req) => {
       await sleep(40);
     }
 
-    return new Response(JSON.stringify({ ref: g.gospel.label, parts: parts.length, sent, dropped }), {
+    return new Response(JSON.stringify({
+      ref: g.gospel.label, parts: parts.length, sent, dropped,
+      ...(only ? { test_target: only } : {}),
+    }), {
       status: 200, headers: { "Content-Type": "application/json" },
     });
   } catch (e) {

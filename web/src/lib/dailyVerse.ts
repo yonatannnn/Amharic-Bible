@@ -1,5 +1,6 @@
 import { getBook } from "@/lib/bible";
 import { BOOK_COUNT } from "@/lib/bibleCanon";
+import { refMtToLxx } from "@/lib/psalms";
 import { generateJSON } from "@/lib/gemini";
 import { createClient } from "@/lib/supabase/server";
 
@@ -46,6 +47,9 @@ const POOL_SCHEMA = {
 } as const;
 
 function validRefs(refs: Ref[]): Ref[] {
+  // Gemini answers in Masoretic psalm numbers whatever the prompt says; the
+  // bundled edition is Septuagint. Convert rather than hope.
+  refs = refs.map((r) => refMtToLxx(r));
   const valid = refs.filter(
     (r) =>
       Number.isInteger(r.book) &&
@@ -74,9 +78,8 @@ Use these book NUMBERS (Ethiopian Orthodox 81-book canon; 1-66 follow the
 familiar order): 1=Genesis … 19=Psalms, 20=Proverbs, 23=Isaiah, 40=Matthew,
 43=John, 45=Romans, 50=Philippians … 66=Revelation, then 67=Tobit, 68=Judith,
 69=Wisdom, 70=Sirach, 71=Baruch, 80=Enoch.
-IMPORTANT: Psalms use SEPTUAGINT numbering, which is one lower than the
-Protestant number for Psalms 10-146 (Protestant Psalm 23 is 22 here, 121 is
-120, 91 is 90). Give the Septuagint number.
+Use the ordinary Protestant psalm numbers you know (Psalm 23, 91, 121) — they
+are converted to this edition's numbering afterwards.
 Vary the books — draw from many different books, not just Psalms and John.
 Choose verses that are genuinely comforting, hopeful, or faith-building.${excludeLine}
 Return a JSON array of objects: {"book":<1-89>,"chapter":<int>,"verse":<int>}.`,
