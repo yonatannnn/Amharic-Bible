@@ -8,11 +8,13 @@ import {
   type Book,
   type BookRef,
 } from "@/lib/bible";
+import { BOOK_COUNT } from "@/lib/bibleCanon";
 import { useSettings } from "@/lib/useSettings";
 import { SettingsPanel } from "./SettingsPanel";
 import { createClient } from "@/lib/supabase/client";
 import { ShareBar, type ShareFriend } from "./ShareBar";
 import { SavedDrawer } from "./SavedDrawer";
+import { verseRows } from "@/lib/verseRows";
 
 type View =
   | { kind: "welcome" }
@@ -58,7 +60,7 @@ export function BibleReader() {
     const params = new URLSearchParams(window.location.search);
     const b = parseInt(params.get("b") ?? "");
     const c = parseInt(params.get("c") ?? "");
-    if (b >= 1 && b <= 66 && c >= 1) {
+    if (b >= 1 && b <= BOOK_COUNT && c >= 1) {
       setView({ kind: "reading", book: b, chapter: c });
     }
   }, []);
@@ -595,13 +597,13 @@ function ChapterReader({
       </p>
 
       <div className="reader-text mt-5 text-ink">
-        {chap.verses.map((v, i) => {
-          const n = i + 1;
-          const selected = sel != null && n >= sel.start && n <= sel.end;
+        {verseRows(chap.verses).map((row) => {
+          const n = row.start;
+          const selected = sel != null && row.end >= sel.start && row.start <= sel.end;
           const isHl = highlighted.has(n);
           return (
             <div
-              key={i}
+              key={n}
               id={`v-${n}`}
               onClick={() => tapVerse(n)}
               className={`flex cursor-pointer gap-3 rounded-lg px-2 py-1 transition-colors [&.flash]:bg-brand-soft ${
@@ -617,9 +619,9 @@ function ChapterReader({
                   selected ? "text-brand-ink/70" : "text-gold/70"
                 }`}
               >
-                {n}
+                {row.label}
               </span>
-              <span className="flex-1">{v}</span>
+              <span className="flex-1">{row.text}</span>
             </div>
           );
         })}

@@ -301,8 +301,8 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
           FriendAvatar(friend: f, radius: 23),
           const SizedBox(width: 12),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(f.display, style: const TextStyle(fontWeight: FontWeight.w600)),
-            Text('@${f.username}', style: TextStyle(color: c.inkFaint, fontSize: 13)),
+            Text(f.display, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600)),
+            Text('@${f.username}', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: c.inkFaint, fontSize: 13)),
           ])),
           Text('🔥 ${f.streakCount}', style: TextStyle(color: c.inkSoft, fontWeight: FontWeight.bold)),
           const SizedBox(width: 10),
@@ -413,8 +413,8 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
         _avatar(c, name, r['avatar_url'] as String?, r: 21),
         const SizedBox(width: 12),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(name ?? '', style: const TextStyle(fontWeight: FontWeight.w600)),
-          Text('@${r['username']}', style: TextStyle(color: c.inkFaint, fontSize: 13)),
+          Text(name ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600)),
+          Text('@${r['username']}', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: c.inkFaint, fontSize: 13)),
         ])),
         if (sent)
           Text('Pending', style: TextStyle(color: c.inkFaint, fontSize: 13, fontWeight: FontWeight.w600))

@@ -173,8 +173,8 @@ class _FriendProfileScreenState extends ConsumerState<FriendProfileScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                Center(child: Text(f.display, style: display(context, size: 24, weight: FontWeight.w700))),
-                Center(child: Text('@${f.username}', style: TextStyle(color: c.inkFaint, fontSize: 14))),
+                Center(child: Text(f.display, textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis, style: display(context, size: 24, weight: FontWeight.w700))),
+                Center(child: Text('@${f.username}', textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: c.inkFaint, fontSize: 14))),
                 if (_restorable) ...[
                   const SizedBox(height: 20),
                   _restoreCard(c),

@@ -35,7 +35,7 @@ export function AppShell({
   const [requests, setRequests] = useState(0);
 
   const refresh = useCallback(async () => {
-    const [{ count: u }, { count: r }] = await Promise.all([
+    const [{ count: u }, { count: r }, { data: g }] = await Promise.all([
       supabase
         .from("messages")
         .select("*", { count: "exact", head: true })
@@ -46,8 +46,9 @@ export function AppShell({
         .select("*", { count: "exact", head: true })
         .eq("addressee_id", myId)
         .eq("status", "pending"),
+      supabase.rpc("group_unread_count"),
     ]);
-    setUnread(u ?? 0);
+    setUnread((u ?? 0) + (typeof g === "number" ? g : 0));
     setRequests(r ?? 0);
   }, [supabase, myId]);
 
@@ -62,6 +63,8 @@ export function AppShell({
       .channel("nav-badges")
       .on("postgres_changes", { event: "*", schema: "public", table: "messages" }, refresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "friendships" }, refresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "group_messages" }, refresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "group_members" }, refresh)
       .subscribe();
     return () => {
       supabase.removeChannel(ch);

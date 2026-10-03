@@ -1,8 +1,11 @@
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'supabase.dart';
 import 'services/friends.dart';
+import 'services/groups.dart';
 import 'services/daily.dart';
+import 'services/gitsawe.dart';
 
 /// Auth state stream — drives routing in AuthGate.
 final authChangesProvider = StreamProvider<AuthState>((ref) {
@@ -10,6 +13,10 @@ final authChangesProvider = StreamProvider<AuthState>((ref) {
 });
 
 /// The signed-in user's profile (name, username, avatar). Null when signed out.
+///
+/// The timeout matters: with no connection the PostgREST request hangs rather
+/// than failing, which left the app on the splash spinner indefinitely. Timing
+/// out turns that into an error the gate can actually show and retry.
 final profileProvider = FutureProvider<Map<String, dynamic>?>((ref) async {
   final uid = supabase.auth.currentUser?.id;
   if (uid == null) return null;
@@ -17,12 +24,33 @@ final profileProvider = FutureProvider<Map<String, dynamic>?>((ref) async {
       .from('profiles')
       .select('id, name, username, avatar_url, is_admin')
       .eq('id', uid)
-      .maybeSingle();
+      .maybeSingle()
+      .timeout(const Duration(seconds: 12));
 });
 
 /// Today's rotating verse (read from the DB pool, with a fallback).
 final dailyVerseProvider = FutureProvider<DailyVerse?>((ref) {
   return DailyService.instance.getDailyVerse();
+});
+
+/// The groups I belong to (verse-sharing group chats). Refreshable.
+final groupsProvider =
+    AsyncNotifierProvider<GroupsNotifier, List<GroupInfo>>(GroupsNotifier.new);
+
+class GroupsNotifier extends AsyncNotifier<List<GroupInfo>> {
+  @override
+  Future<List<GroupInfo>> build() {
+    return GroupsService.instance.getGroups();
+  }
+
+  Future<void> refresh() async {
+    state = await AsyncValue.guard(() => GroupsService.instance.getGroups());
+  }
+}
+
+/// Today's ግጻዌ readings (lectionary + ስንክሳር), from the bundled data.
+final gitsaweProvider = FutureProvider<TodaysGitsawe?>((ref) {
+  return GitsaweService.instance.today();
 });
 
 /// Today's chapter + reading-streak state.

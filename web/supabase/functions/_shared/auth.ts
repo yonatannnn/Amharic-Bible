@@ -45,11 +45,12 @@ export async function logVerseUse(supabase: SupabaseClient, refs: Ref[], channel
   await supabase.from("verse_history").insert(refs.map((r) => ({ ...r, channel })));
 }
 
-// Resolve a verse reference → { ref, text } via the content API.
-const BIBLE_API = "https://faithful-marni-anatoli-b7663357.koyeb.app";
+// Resolve a verse reference → { ref, text } from the static Bible JSON
+// bundled with the web app (same source of truth as web + mobile).
+const BIBLE_STATIC = "https://amharic-bible-eta.vercel.app/bible";
 export async function tryRef(book: number, chapter: number, verse: number): Promise<{ ref: string; text: string } | null> {
   try {
-    const res = await fetch(`${BIBLE_API}/book/${book}`);
+    const res = await fetch(`${BIBLE_STATIC}/${String(book).padStart(2, "0")}.json`);
     const b = await res.json();
     const text = b.chapters?.[chapter - 1]?.verses?.[verse - 1];
     if (text) return { ref: `${b.title ?? "Book " + book} ${chapter}:${verse}`, text };

@@ -129,11 +129,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   Widget _statusText(AppColors c) {
     switch (_status) {
       case 'invalid':
-        return Text('3–20 chars: a–z, 0–9, _', style: TextStyle(color: c.warn, fontSize: 12));
+        return Text('3–20 chars: a–z, 0–9, _',
+            maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: c.warn, fontSize: 12));
       case 'taken':
-        return Text('@$_clean is taken', style: const TextStyle(color: Colors.red, fontSize: 12));
+        return Text('@$_clean is taken',
+            maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.red, fontSize: 12));
       case 'ok':
-        return Text('@$_clean is available', style: TextStyle(color: c.good, fontSize: 12));
+        return Text('@$_clean is available',
+            maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: c.good, fontSize: 12));
       default:
         return const SizedBox();
     }

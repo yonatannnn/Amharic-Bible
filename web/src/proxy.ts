@@ -9,7 +9,9 @@ export async function proxy(request: NextRequest) {
 export const config = {
   matcher: [
     // Run on everything except static assets, image files, API routes (they do
-    // their own auth), and the Bible API proxy.
-    "/((?!_next/static|_next/image|api|bible-api|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    // their own auth), and the bundled scripture data in /public — the Bible
+    // text, the ግጻዌ lectionary and the ስንክሳር. Those are fetched server-side
+    // during render, so an auth redirect on them breaks the page.
+    "/((?!_next/static|_next/image|api|bible/|gitsawe/|sinksar/|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
 };

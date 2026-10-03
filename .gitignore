@@ -1,40 +1,20 @@
-# ---- secrets / env ----
-.env
-.env.local
-.env.*.local
-*.env
-**/google-services.json
-**/GoogleService-Info.plist
-**/key.properties
-*.jks
-*.keystore
-
-# ---- node / next ----
+# build output and caches
 node_modules/
 .next/
-out/
 dist/
-coverage/
-*.tsbuildinfo
-.vercel/
-
-# ---- flutter / dart ----
+build/
 .dart_tool/
-.flutter-plugins
-.flutter-plugins-dependencies
-**/build/
-*.iml
-.gradle/
-mobile/ios/Flutter/ephemeral/
-mobile/ios/Pods/
-
-# ---- supabase ----
-supabase/.temp/
-**/.temp/
-
-# ---- misc / os / editor ----
-.DS_Store
-*.log
 .idea/
-.vscode/
-.claude/
+*.iml
+
+# secrets
+.env
+.env.*
+!.env*.example
+
+# local DB backups (contain user data)
+backups/
+
+# nested repos keep their own history
+web/
+amharic-bible-api/

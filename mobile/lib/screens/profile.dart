@@ -233,9 +233,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         padding: const EdgeInsets.symmetric(vertical: 12),
         decoration: BoxDecoration(color: c.surface, border: Border.all(color: c.line), borderRadius: BorderRadius.circular(16)),
         child: Column(children: [
-          Text(n, style: display(context, size: 22, weight: FontWeight.w700, color: c.brand)),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(n, maxLines: 1, style: display(context, size: 22, weight: FontWeight.w700, color: c.brand)),
+          ),
           const SizedBox(height: 2),
-          Text(label, style: TextStyle(color: c.inkFaint, fontSize: 11)),
+          Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: TextStyle(color: c.inkFaint, fontSize: 11)),
         ]),
       ),
     );
@@ -243,9 +246,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   Widget _uText(AppColors c) {
     switch (_uStatus) {
-      case 'invalid': return Text('3–20 chars: a–z, 0–9, _', style: TextStyle(color: c.warn, fontSize: 12));
-      case 'taken': return Text('@$_clean is taken', style: const TextStyle(color: Colors.red, fontSize: 12));
-      case 'ok': return Text('@$_clean is available', style: TextStyle(color: c.good, fontSize: 12));
+      case 'invalid': return Text('3–20 chars: a–z, 0–9, _', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: c.warn, fontSize: 12));
+      case 'taken': return Text('@$_clean is taken', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.red, fontSize: 12));
+      case 'ok': return Text('@$_clean is available', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: c.good, fontSize: 12));
       default: return const SizedBox();
     }
   }

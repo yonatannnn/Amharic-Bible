@@ -105,7 +105,7 @@ class _AdminVersePickerState extends State<AdminVersePicker> {
     final f = _filter.trim().toLowerCase();
     final list = f.isEmpty
         ? _books!
-        : _books!.where((b) => b.name.toLowerCase().contains(f) || '${b.num}'.contains(f)).toList();
+        : _books!.where((b) => b.name.toLowerCase().contains(f) || '${b.position}'.contains(f)).toList();
     return Column(children: [
       Padding(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
@@ -135,7 +135,7 @@ class _AdminVersePickerState extends State<AdminVersePicker> {
                   Container(
                     width: 30, height: 30, alignment: Alignment.center,
                     decoration: BoxDecoration(color: c.surface2, borderRadius: BorderRadius.circular(9)),
-                    child: Text('${b.num}', style: display(context, size: 12, weight: FontWeight.w600, color: c.inkFaint)),
+                    child: Text('${b.position}', style: display(context, size: 12, weight: FontWeight.w600, color: c.inkFaint)),
                   ),
                   const SizedBox(width: 12),
                   Expanded(child: Text(b.name, style: amharic(context, size: 15.5, weight: FontWeight.w500))),

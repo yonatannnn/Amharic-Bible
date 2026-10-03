@@ -1,5 +1,11 @@
 import '../supabase.dart';
 import 'bible.dart';
+import 'bible_canon.dart';
+
+// chapterCounts, chapterTotal, bookCount and planBookCount are generated from
+// the bundled edition by web/scripts/build-bible.mjs, so the two platforms can
+// never drift apart.
+export 'bible_canon.dart' show chapterCounts, chapterTotal, bookCount, planBookCount;
 
 String _two(int n) => n.toString().padLeft(2, '0');
 
@@ -7,6 +13,45 @@ String _two(int n) => n.toString().padLeft(2, '0');
 String addisDay() {
   final n = DateTime.now().toUtc().add(const Duration(hours: 3));
   return '${n.year}-${_two(n.month)}-${_two(n.day)}';
+}
+
+
+/// 0-based linear index of a (1-based) book + chapter within the Bible.
+int linearIndex(int book, int chapter) {
+  var idx = chapter - 1;
+  for (var i = 0; i < book - 1; i++) {
+    idx += chapterCounts[i];
+  }
+  return idx;
+}
+
+/// Convert a 0-based linear index back to a {book, chapter} pair (1-based).
+Map<String, int> chapterFromLinearIndex(int index) {
+  var idx = index % chapterTotal;
+  for (var i = 0; i < planBookCount; i++) {
+    if (idx < chapterCounts[i]) {
+      return {'book': i + 1, 'chapter': idx + 1};
+    }
+    idx -= chapterCounts[i];
+  }
+  return {'book': 1, 'chapter': 1};
+}
+
+/// Pick the consecutive-plan chapter for [today] (YYYY-MM-DD, Addis day),
+/// given the user's start point. Advances one chapter per elapsed day,
+/// wrapping Revelation -> Genesis.
+Map<String, int> consecutiveChapterFor({
+  required String today,
+  required int startBook,
+  required int startChapter,
+  required String startDate,
+}) {
+  final sb = startBook.clamp(1, planBookCount);
+  final sc = startChapter.clamp(1, chapterCounts[sb - 1]);
+  final daysElapsed = DateTime.parse(today).difference(DateTime.parse(startDate)).inDays;
+  final elapsed = daysElapsed < 0 ? 0 : daysElapsed;
+  final idx = (linearIndex(sb, sc) + elapsed) % chapterTotal;
+  return chapterFromLinearIndex(idx);
 }
 
 const _fallbackVerses = [
@@ -20,14 +65,38 @@ const _fallbackVerses = [
   {'book': 19, 'chapter': 46, 'verse': 1},
 ];
 
+// Must stay byte-for-byte identical (list, order, and hash) to the web app's
+// fallback in web/src/lib/readingPlan.ts, so that on a day with no AI-generated
+// daily_chapter row BOTH platforms pick the SAME chapter.
 const _fallbackChapters = [
-  {'book': 43, 'chapter': 1},
-  {'book': 40, 'chapter': 5},
-  {'book': 45, 'chapter': 8},
-  {'book': 50, 'chapter': 2},
-  {'book': 19, 'chapter': 23},
-  {'book': 42, 'chapter': 15},
+  {'book': 43, 'chapter': 1}, // John 1
+  {'book': 40, 'chapter': 5}, // Matthew 5
+  {'book': 45, 'chapter': 8}, // Romans 8
+  {'book': 46, 'chapter': 13}, // 1 Corinthians 13
+  {'book': 50, 'chapter': 2}, // Philippians 2
+  {'book': 43, 'chapter': 15}, // John 15
+  {'book': 42, 'chapter': 15}, // Luke 15
+  {'book': 44, 'chapter': 2}, // Acts 2
+  {'book': 58, 'chapter': 11}, // Hebrews 11
+  {'book': 59, 'chapter': 1}, // James 1
+  {'book': 49, 'chapter': 3}, // Ephesians 3
+  {'book': 51, 'chapter': 3}, // Colossians 3
+  {'book': 19, 'chapter': 23}, // Psalm 23
+  {'book': 23, 'chapter': 53}, // Isaiah 53
+  {'book': 20, 'chapter': 3}, // Proverbs 3
 ];
+
+// Same string hash the web app uses: h = (h * 31 + charCode) >>> 0 (unsigned 32-bit).
+int _dayHash(String dayKey) {
+  int h = 0;
+  for (final c in dayKey.codeUnits) {
+    h = (h * 31 + c) & 0xFFFFFFFF;
+  }
+  return h;
+}
+
+Map<String, int> _fallbackChapterFor(String day) =>
+    _fallbackChapters[_dayHash(day) % _fallbackChapters.length];
 
 class DailyVerse {
   final int book, chapter, verse;
@@ -213,24 +282,53 @@ class DailyService {
     final day = addisDay();
 
     int book, chapter;
+
+    // If the user is on the "read in order" plan, their daily chapter is
+    // derived locally from the start point and elapsed days.
+    Map<String, int>? consecutive;
     try {
-      final row = await supabase
-          .from('daily_chapter')
-          .select('book, chapter')
-          .eq('date', day)
+      final plan = await supabase
+          .from('reading_plan')
+          .select('mode,start_book,start_chapter,start_date')
+          .eq('user_id', uid)
           .maybeSingle();
-      if (row != null) {
-        book = row['book'] as int;
-        chapter = row['chapter'] as int;
-      } else {
-        final f = _fallbackChapters[day.hashCode.abs() % _fallbackChapters.length];
+      if (plan != null &&
+          plan['mode'] == 'consecutive' &&
+          plan['start_book'] != null &&
+          plan['start_chapter'] != null &&
+          plan['start_date'] != null) {
+        consecutive = consecutiveChapterFor(
+          today: day,
+          startBook: plan['start_book'] as int,
+          startChapter: plan['start_chapter'] as int,
+          startDate: (plan['start_date'] as String).split('T').first,
+        );
+      }
+    } catch (_) {}
+
+    if (consecutive != null) {
+      book = consecutive['book']!;
+      chapter = consecutive['chapter']!;
+    } else {
+      try {
+        final row = await supabase
+            .from('daily_chapter')
+            .select('book, chapter')
+            .eq('date', day)
+            .maybeSingle();
+        if (row != null) {
+          book = row['book'] as int;
+          chapter = row['chapter'] as int;
+        } else {
+          final f = _fallbackChapterFor(day);
+          book = f['book']!;
+          chapter = f['chapter']!;
+        }
+      } catch (_) {
+        final f = _fallbackChapterFor(day);
         book = f['book']!;
         chapter = f['chapter']!;
       }
-    } catch (_) {
-      final f = _fallbackChapters[day.hashCode.abs() % _fallbackChapters.length];
-      book = f['book']!;
-      chapter = f['chapter']!;
     }
 
     final results = await Future.wait([

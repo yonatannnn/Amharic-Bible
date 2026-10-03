@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getBooks, getBook, type BookRef } from "@/lib/bible";
+import { verseRows } from "@/lib/verseRows";
 
 export type PickedVerse = {
   book: number;
@@ -104,8 +105,9 @@ export function VersePicker({
           <p className="py-10 text-center text-sm text-ink-faint">Loading…</p>
         ) : chapter !== null ? (
           <ol className="space-y-1">
-            {verses.map((text, i) => {
-              const n = i + 1;
+            {verseRows(verses).map((row) => {
+              const n = row.start;
+              const text = row.text;
               return (
                 <li key={n}>
                   <button
@@ -115,13 +117,13 @@ export function VersePicker({
                         chapter,
                         verse: n,
                         text,
-                        label: `${book!.name} ${chapter}:${n}`,
+                        label: `${book!.name} ${chapter}:${row.label}`,
                       })
                     }
                     className="flex w-full gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-surface-2"
                   >
                     <span className="w-6 shrink-0 pt-0.5 text-right text-xs font-bold tabular-nums text-gold/70">
-                      {n}
+                      {row.label}
                     </span>
                     <span className="amharic flex-1 text-[0.95rem] leading-relaxed">
                       {text}

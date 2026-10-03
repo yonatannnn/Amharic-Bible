@@ -8,16 +8,20 @@ friend keep a streak alive by **sharing scripture with each other every day**, t
 ## Platforms / folders
 ```
 Bible/
-├── amharic-bible-api/   ← existing NestJS service (Amharic Bible content) — deployed on Koyeb
-├── web/                 ← Next.js web app          (to build)
-└── mobile/              ← Flutter app (iOS+Android) (to build)
+├── bible81/             ← EOTC 81-book Bible data + local API (source of truth)
+├── gitsawe/             ← ግጻዌ lectionary source PDFs
+├── web/                 ← Next.js web app
+└── mobile/              ← Flutter app (iOS+Android)
 ```
-Deployed content API: https://faithful-marni-anatoli-b7663357.koyeb.app
+Bible text is bundled with each app (web/public/bible, mobile/assets/bible),
+generated from `bible81/` by `web/scripts/build-bible.mjs`. There is no content
+API to call at runtime.
 
 ## Backend
 - **Supabase** — Postgres, Auth (Google + email/password), Realtime (chat + streak),
   Storage (avatars, future verse images), Edge Functions (Gemini daily verse, streak cron).
-- **Existing NestJS API** — serves Bible text (books / chapters / verses).
+- **Bundled Bible text** — the EOTC 81-book canon (am-2000 edition) ships inside
+  both apps as static JSON. Offline, no CORS proxy, no cold starts.
 - **Gemini** (server-side, via Supabase Edge Function) — curates the **home-screen
   rotating verse** only. Returns *references*; real Amharic text is fetched from the API
   (never let the LLM write scripture). ~1 call/day, shared globally.

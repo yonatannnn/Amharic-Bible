@@ -7,12 +7,15 @@ import '../supabase.dart';
 import '../theme.dart';
 import '../state/settings.dart';
 import '../services/daily.dart';
+import '../services/gitsawe.dart';
 import '../widgets/reveal.dart';
+import '../widgets/gitsawe_card.dart';
 import '../widgets/verse_share.dart';
 import '../providers.dart';
 import 'verse_picker.dart';
 import 'admin_verse_picker.dart';
 import 'telegram_queue_page.dart';
+import '../services/bible.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -22,6 +25,11 @@ class HomeScreen extends ConsumerStatefulWidget {
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   int? _selStart, _selEnd;
+
+  /// Selection inside one of today's ግጻዌ readings. Kept apart from the daily
+  /// chapter's selection so the share bar always names the right passage.
+  GitsaweSelection? _gitsaweSel;
+  final _gitsaweKey = GlobalKey<GitsaweCardState>();
   RealtimeChannel? _rt;
 
   @override
@@ -50,7 +58,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       final r = nextSelection(_selStart, _selEnd, n);
       _selStart = r[0];
       _selEnd = r[1];
+      if (_selStart != null) _gitsaweSel = null;
     });
+    _gitsaweKey.currentState?.clearSelection();
   }
 
   @override
@@ -59,10 +69,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final profileAsync = ref.watch(profileProvider);
     final verseAsync = ref.watch(dailyVerseProvider);
     final readingAsync = ref.watch(todaysReadingProvider);
+    final gitsaweAsync = ref.watch(gitsaweProvider);
     final urgent = ref.watch(urgentStreakProvider).asData?.value;
     return Scaffold(
       body: SafeArea(
-        child: _content(c, profileAsync, verseAsync, readingAsync, urgent),
+        child: _content(c, profileAsync, verseAsync, readingAsync, gitsaweAsync, urgent),
       ),
     );
   }
@@ -72,15 +83,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     AsyncValue<Map<String, dynamic>?> profileAsync,
     AsyncValue<DailyVerse?> verseAsync,
     AsyncValue<TodaysReading?> readingAsync,
+    AsyncValue<TodaysGitsawe?> gitsaweAsync,
     StreakReminder? urgent,
   ) {
     // Render the greeting immediately; each section streams in on its own.
     final profile = profileAsync.asData?.value;
     final verse = verseAsync.asData?.value;
     final reading = readingAsync.asData?.value;
+    final gitsawe = gitsaweAsync.asData?.value;
     final name = (profile?['name'] ?? profile?['username'] ?? 'friend') as String;
     final first = name.split(' ').first;
-    final hasSel = _selStart != null;
+    final hasSel = _selStart != null || _gitsaweSel != null;
     return RefreshIndicator(
       onRefresh: () async {
         ref.invalidate(profileProvider);
@@ -118,6 +131,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             else if (verseAsync.isLoading)
               _verseSkeleton(c),
             const SizedBox(height: 16),
+            // today's ግጻዌ readings — hidden entirely if the day has none
+            if (gitsawe != null && !gitsawe.isEmpty) ...[
+              Reveal(
+                delay: const Duration(milliseconds: 130),
+                child: GitsaweCard(
+                  key: _gitsaweKey,
+                  data: gitsawe,
+                  readerSize: settings.readerSize,
+                  onSelect: (sel) => setState(() {
+                    _gitsaweSel = sel;
+                    // Only one share bar at a time.
+                    if (sel != null) _selStart = _selEnd = null;
+                  }),
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
             // today's chapter — skeleton while it loads
             if (reading != null)
               Reveal(
@@ -134,7 +164,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               _chapterSkeleton(c),
           ],
         ),
-        if (hasSel && reading != null)
+        if (_gitsaweSel != null)
+          Positioned(left: 0, right: 0, bottom: 0, child: _gitsaweBar(_gitsaweSel!))
+        else if (_selStart != null && reading != null)
           Positioned(left: 0, right: 0, bottom: 0, child: _floatingBar(reading)),
       ]),
     );
@@ -200,10 +232,26 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
+  /// Share bar for a selection inside one of today's ግጻዌ readings.
+  Widget _gitsaweBar(GitsaweSelection sel) {
+    return VerseShareBar(
+      book: sel.reading.bookNum,
+      chapter: sel.reading.ref.chapter,
+      start: sel.start,
+      end: sel.end,
+      ref: sel.refLabel,
+      text: sel.text,
+      onClear: () {
+        setState(() => _gitsaweSel = null);
+        _gitsaweKey.currentState?.clearSelection();
+      },
+    );
+  }
+
   Widget _floatingBar(TodaysReading r) {
     final s = _selStart!, e = _selEnd!;
     final range = s == e ? '$s' : '$s-$e';
-    final text = r.verses.sublist(s - 1, e).join(' ');
+    final text = r.verses.sublist(s - 1, e).where((t) => t.trim().isNotEmpty).join(' ');
     final refLabel = '${r.bookName} ${r.chapter}:$range';
     return VerseShareBar(
       book: r.book, chapter: r.chapter, start: s, end: e, ref: refLabel, text: text,
@@ -226,9 +274,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         const SizedBox(width: 12),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
           Text('${s.count}-day streak with ${s.friend.display}',
+              maxLines: 1, overflow: TextOverflow.ellipsis,
               style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
           const SizedBox(height: 1),
-          Text('Share a verse to keep it · $timeLeft', style: TextStyle(color: c.inkSoft, fontSize: 12)),
+          Text('Share a verse to keep it · $timeLeft', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: c.inkSoft, fontSize: 12)),
         ])),
         const SizedBox(width: 8),
         FilledButton(
@@ -409,15 +458,15 @@ class _ChapterCardState extends State<_ChapterCard> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              for (var i = 0; i < r.verses.length; i++)
+              for (final row in verseRows(r.verses))
                 VerseTile(
-                  n: i + 1,
-                  text: r.verses[i],
+                  label: row.label,
+                  text: row.text,
                   size: size,
                   selected: widget.selStart != null &&
-                      (i + 1) >= widget.selStart! &&
-                      (i + 1) <= widget.selEnd!,
-                  onTap: () => widget.onTapVerse(i + 1),
+                      row.end >= widget.selStart! &&
+                      row.start <= widget.selEnd!,
+                  onTap: () => widget.onTapVerse(row.start),
                 ),
             ],
           ),

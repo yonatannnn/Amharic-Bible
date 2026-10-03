@@ -10,14 +10,14 @@ import '../screens/verse_image.dart';
 /// One selectable verse with a superscript number. Shared by Home + Reader so
 /// the reading experience is identical everywhere.
 class VerseTile extends StatelessWidget {
-  final int n;
+  final String label;
   final String text;
   final double size;
   final bool selected;
   final VoidCallback onTap;
   const VerseTile({
     super.key,
-    required this.n,
+    required this.label,
     required this.text,
     required this.size,
     required this.selected,
@@ -47,7 +47,7 @@ class VerseTile extends StatelessWidget {
               alignment: PlaceholderAlignment.top,
               child: Padding(
                 padding: const EdgeInsets.only(right: 5, top: 1),
-                child: Text('$n',
+                child: Text(label,
                     style: TextStyle(
                       fontSize: size * 0.54,
                       color: selected ? c.brand : c.gold.withValues(alpha: 0.7),
@@ -126,33 +126,91 @@ class _VerseShareBarState extends ConsumerState<VerseShareBar> {
     widget.onClear();
   }
 
+  Future<void> _sendMany(List<FriendInfo> targets) async {
+    for (final f in targets) {
+      await FriendsService.instance
+          .shareVerse(f.friendshipId, widget.book, widget.chapter, widget.start, widget.end);
+    }
+    if (!mounted) return;
+    final msg = targets.length == 1
+        ? 'Shared with ${targets.first.display} 🔥'
+        : 'Shared with ${targets.length} friends 🔥';
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), behavior: SnackBarBehavior.floating),
+    );
+    widget.onClear();
+  }
+
   void _pickFriend(List<FriendInfo> friends) {
     final c = colorsOf(context);
+    final selected = <String>{}; // selected friendshipIds
     showModalBottomSheet(
       context: context,
       backgroundColor: c.surface,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) => SafeArea(
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const SizedBox(height: 12),
-          Text('Send to a friend', style: display(context, size: 16, weight: FontWeight.w700)),
-          const SizedBox(height: 8),
-          for (final f in friends)
-            ListTile(
-              leading: CircleAvatar(
-                backgroundColor: c.good,
-                backgroundImage: f.avatarUrl != null ? NetworkImage(f.avatarUrl!) : null,
-                child: f.avatarUrl == null ? Text(f.display[0].toUpperCase(), style: const TextStyle(color: Colors.white)) : null,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheet) => SafeArea(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.85),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              const SizedBox(height: 12),
+              Text('Send to friends', style: display(context, size: 16, weight: FontWeight.w700)),
+              const SizedBox(height: 2),
+              Text('Tap to select one or more', style: TextStyle(color: c.inkFaint, fontSize: 12)),
+              const SizedBox(height: 8),
+              Flexible(
+                child: ListView(
+                  shrinkWrap: true,
+                  children: [
+                    for (final f in friends)
+                      CheckboxListTile(
+                        value: selected.contains(f.friendshipId),
+                        activeColor: c.brand,
+                        controlAffinity: ListTileControlAffinity.trailing,
+                        onChanged: (v) => setSheet(() {
+                          if (v == true) {
+                            selected.add(f.friendshipId);
+                          } else {
+                            selected.remove(f.friendshipId);
+                          }
+                        }),
+                        secondary: CircleAvatar(
+                          backgroundColor: c.good,
+                          backgroundImage: f.avatarUrl != null ? NetworkImage(f.avatarUrl!) : null,
+                          child: f.avatarUrl == null ? Text(f.display[0].toUpperCase(), style: const TextStyle(color: Colors.white)) : null,
+                        ),
+                        title: Text(f.display, maxLines: 1, overflow: TextOverflow.ellipsis),
+                        subtitle: Text('🔥 ${f.streakCount}', style: TextStyle(color: c.inkSoft)),
+                      ),
+                  ],
+                ),
               ),
-              title: Text(f.display),
-              trailing: Text('🔥 ${f.streakCount}', style: TextStyle(color: c.inkSoft)),
-              onTap: () {
-                Navigator.pop(ctx);
-                _send(f);
-              },
-            ),
-          const SizedBox(height: 12),
-        ]),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: c.brand, foregroundColor: c.brandInk,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    onPressed: selected.isEmpty
+                        ? null
+                        : () {
+                            Navigator.pop(ctx);
+                            _sendMany(friends.where((f) => selected.contains(f.friendshipId)).toList());
+                          },
+                    child: Text(selected.isEmpty
+                        ? 'Select friends'
+                        : 'Send to ${selected.length} friend${selected.length == 1 ? '' : 's'} 🔥'),
+                  ),
+                ),
+              ),
+            ]),
+          ),
+        ),
       ),
     );
   }

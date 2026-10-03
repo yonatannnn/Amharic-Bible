@@ -32,6 +32,19 @@ export function StreakCard({
     ? new Date(streak.window_deadline)
     : null;
 
+  // A broken streak stays restorable for 48h, even after a fresh streak has
+  // started — so the Restore option survives the next verse you send.
+  const restorableCount = streak?.restorable_count ?? 0;
+  const restorableAt = streak?.restorable_at
+    ? new Date(streak.restorable_at)
+    : null;
+  const canRestore =
+    restorableCount > 0 &&
+    restorableAt !== null &&
+    Date.now() - restorableAt.getTime() < 48 * 3_600_000 &&
+    (streak?.restores_remaining ?? 0) > 0;
+  const showRestore = broken || canRestore;
+
   return (
     <div className="overflow-hidden rounded-3xl border border-line bg-surface shadow-card">
       {/* hero */}
@@ -60,10 +73,11 @@ export function StreakCard({
       </div>
 
       <div className="border-t border-line px-5 pb-5 pt-4">
-        {broken ? (
+        {showRestore ? (
           <RestoreRow
             friendshipId={friendshipId}
             restores={streak?.restores_remaining ?? 0}
+            streakValue={restorableCount > 0 ? restorableCount : count}
           />
         ) : (
           <div className="mb-4 flex items-center justify-center gap-3 text-sm">
@@ -145,9 +159,11 @@ function Countdown({
 function RestoreRow({
   friendshipId,
   restores,
+  streakValue,
 }: {
   friendshipId: string;
   restores: number;
+  streakValue: number;
 }) {
   return (
     <form
@@ -157,7 +173,7 @@ function RestoreRow({
     >
       <input type="hidden" name="friendshipId" value={friendshipId} />
       <span className="text-sm text-ink-soft">
-        Restore your streak? <b className="text-ink">{restores}</b> left this month
+        Restore your {streakValue > 0 ? <b className="text-ink">{streakValue}</b> : null}-day streak? <b className="text-ink">{restores}</b> left this month
       </span>
       <button
         type="submit"

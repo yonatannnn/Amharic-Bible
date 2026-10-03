@@ -46,6 +46,8 @@ class _ShellState extends State<Shell> {
         .channel('shell-badges')
         .onPostgresChanges(event: PostgresChangeEvent.all, schema: 'public', table: 'messages', callback: (_) => _loadBadges())
         .onPostgresChanges(event: PostgresChangeEvent.all, schema: 'public', table: 'friendships', callback: (_) => _loadBadges())
+        .onPostgresChanges(event: PostgresChangeEvent.all, schema: 'public', table: 'group_messages', callback: (_) => _loadBadges())
+        .onPostgresChanges(event: PostgresChangeEvent.all, schema: 'public', table: 'group_members', callback: (_) => _loadBadges())
         .subscribe();
     // A notification can ask the shell to jump to a tab.
     appTab.addListener(_onTabRequest);
@@ -76,7 +78,10 @@ class _ShellState extends State<Shell> {
           .count(CountOption.exact)
           .eq('status', 'pending')
           .eq('addressee_id', _uid);
-      if (mounted) setState(() { _unread = unread; _requests = reqs; });
+      // Unread group messages (newer than each group's last_read_at).
+      final g = await supabase.rpc('group_unread_count');
+      final groupUnread = g is int ? g : 0;
+      if (mounted) setState(() { _unread = unread + groupUnread; _requests = reqs; });
     } catch (_) {}
   }
 

@@ -4,7 +4,22 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useSettings } from "@/lib/useSettings";
+import { getBooks, type BookRef } from "@/lib/bible";
+import { CHAPTER_COUNTS, PLAN_BOOK_COUNT } from "@/lib/chapterPlan";
 import { ConfirmDialog } from "./ConfirmDialog";
+
+const ADDIS = "Africa/Addis_Ababa";
+
+/** Today's date as YYYY-MM-DD in Ethiopia time (the shared "reading day"). */
+function addisToday(): string {
+  try {
+    return new Intl.DateTimeFormat("en-CA", { timeZone: ADDIS }).format(
+      new Date(),
+    );
+  } catch {
+    return new Date().toISOString().slice(0, 10);
+  }
+}
 
 export function SettingsClient({
   userId,
@@ -28,6 +43,11 @@ export function SettingsClient({
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
+  const [books, setBooks] = useState<BookRef[]>([]);
+  const [inOrder, setInOrder] = useState(false);
+  const [startBook, setStartBook] = useState(1);
+  const [startChapter, setStartChapter] = useState(1);
+
   useEffect(() => {
     try {
       const all: string[] = Intl.supportedValuesOf?.("timeZone") ?? [];
@@ -36,6 +56,75 @@ export function SettingsClient({
       setZones([timezone]);
     }
   }, [timezone]);
+
+  // Load book names + this user's existing reading plan.
+  useEffect(() => {
+    let alive = true;
+    getBooks()
+      .then((b) => alive && setBooks(b))
+      .catch(() => {});
+    supabase
+      .from("reading_plan")
+      .select("mode,start_book,start_chapter")
+      .eq("user_id", userId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!alive || !data) return;
+        setInOrder(data.mode === "consecutive");
+        if (data.start_book) setStartBook(data.start_book);
+        if (data.start_chapter) setStartChapter(data.start_chapter);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [supabase, userId]);
+
+  /** Upsert the plan, stamping start_date = today so "today" maps to the start. */
+  async function savePlan(next: {
+    mode: "random" | "consecutive";
+    book: number;
+    chapter: number;
+  }) {
+    const book = Math.min(Math.max(1, next.book), PLAN_BOOK_COUNT);
+    const chapter = Math.min(
+      Math.max(1, next.chapter),
+      CHAPTER_COUNTS[book - 1],
+    );
+    const { error } = await supabase.from("reading_plan").upsert(
+      {
+        user_id: userId,
+        mode: next.mode,
+        start_book: book,
+        start_chapter: chapter,
+        start_date: addisToday(),
+      },
+      { onConflict: "user_id" },
+    );
+    if (error) return flash(error.message);
+    flash("Reading plan saved");
+  }
+
+  function toggleInOrder(on: boolean) {
+    setInOrder(on);
+    savePlan({
+      mode: on ? "consecutive" : "random",
+      book: startBook,
+      chapter: startChapter,
+    });
+  }
+
+  function changeStartBook(book: number) {
+    const chapter = Math.min(startChapter, CHAPTER_COUNTS[book - 1]);
+    setStartBook(book);
+    setStartChapter(chapter);
+    if (inOrder) savePlan({ mode: "consecutive", book, chapter });
+  }
+
+  function changeStartChapter(chapter: number) {
+    setStartChapter(chapter);
+    if (inOrder)
+      savePlan({ mode: "consecutive", book: startBook, chapter });
+  }
 
   function flash(m: string) {
     setToast(m);
@@ -118,6 +207,52 @@ export function SettingsClient({
         <div className="reader-text rounded-xl bg-surface-2 p-3 text-ink">
           በመጀመሪያ እግዚአብሔር ሰማይንና ምድርን ፈጠረ።
         </div>
+      </Section>
+
+      {/* daily chapter */}
+      <Section title="Daily chapter">
+        <Field label="Read the Bible in order">
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-line bg-surface-2 px-4 py-3">
+            <span className="text-sm text-ink-soft">
+              Advance one chapter each day
+            </span>
+            <Toggle on={inOrder} onChange={toggleInOrder} />
+          </div>
+        </Field>
+        {inOrder && (
+          <Field label="Start from">
+            <div className="flex gap-2">
+              <select
+                value={startBook}
+                onChange={(e) => changeStartBook(+e.target.value)}
+                className="flex-1 rounded-xl border border-line bg-surface-2 px-4 py-3 text-sm outline-none focus:border-brand"
+              >
+                {Array.from({ length: PLAN_BOOK_COUNT }, (_, i) => i + 1).map((n) => (
+                  <option key={n} value={n}>
+                    {books.find((b) => b.num === n)?.name ?? `Book ${n}`}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={startChapter}
+                onChange={(e) => changeStartChapter(+e.target.value)}
+                className="w-28 rounded-xl border border-line bg-surface-2 px-4 py-3 text-sm outline-none focus:border-brand"
+              >
+                {Array.from(
+                  { length: CHAPTER_COUNTS[startBook - 1] },
+                  (_, i) => i + 1,
+                ).map((c) => (
+                  <option key={c} value={c}>
+                    Ch {c}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </Field>
+        )}
+        <p className="text-[13px] text-ink-faint">
+          Today shows your chosen chapter; it advances one chapter each day.
+        </p>
       </Section>
 
       {/* account */}
@@ -233,6 +368,32 @@ function Field({
       </label>
       {children}
     </div>
+  );
+}
+
+function Toggle({
+  on,
+  onChange,
+}: {
+  on: boolean;
+  onChange: (on: boolean) => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      onClick={() => onChange(!on)}
+      className={`relative h-6 w-11 shrink-0 rounded-full transition ${
+        on ? "bg-brand" : "bg-line"
+      }`}
+    >
+      <span
+        className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-card transition ${
+          on ? "left-[22px]" : "left-0.5"
+        }`}
+      />
+    </button>
   );
 }
 

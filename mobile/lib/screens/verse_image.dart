@@ -67,9 +67,11 @@ class _VerseImageScreenState extends State<VerseImageScreen> {
       body: Column(children: [
         Expanded(
           child: Center(
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: RepaintBoundary(key: _boundaryKey, child: _card()),
+            child: SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: RepaintBoundary(key: _boundaryKey, child: _card()),
+              ),
             ),
           ),
         ),

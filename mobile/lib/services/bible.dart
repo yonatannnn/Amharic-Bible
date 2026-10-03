@@ -1,11 +1,71 @@
 import 'dart:convert';
-import 'package:http/http.dart' as http;
-import '../config.dart';
+import 'package:flutter/services.dart' show rootBundle;
+
+/// Bible text service — reads the JSON bundled with the app in
+/// assets/bible/ (one file per book, 01–89, plus 00.json = name index and
+/// manifest.json = canon metadata). Regenerate with web/scripts/build-bible.mjs.
+///
+/// The edition is the EOTC 81-book canon (am-2000). Book numbers 1–66 mean
+/// exactly what they always did; the deuterocanonical books are 67–89.
+/// Psalms use LXX numbering — see web/supabase/migration_eotc81_renumber.sql.
+/// Fully offline: no network calls, no external content API.
+
+/// A display row of the reading view. Where the am-2000 source lost a verse
+/// boundary (the "empty verse" gaps — the text of verse N+1 sits inside verse
+/// N), the row spans both numbers and is labelled "N-N+1" instead of showing
+/// a bare number with no text.
+class VerseRow {
+  final int start;
+  final int end;
+  final String text;
+  const VerseRow(this.start, this.end, this.text);
+  String get label => start == end ? '$start' : '$start-$end';
+}
+
+/// Fold a numbered verse list into display rows: a verse with text absorbs the
+/// empty verses that follow it; empty verses at the very start fold into the
+/// first verse with text.
+List<VerseRow> foldNumbered(List<(int, String)> verses) {
+  final rows = <VerseRow>[];
+  int? start;
+  for (final (n, t) in verses) {
+    start ??= n;
+    if (t.trim().isEmpty) {
+      if (rows.isNotEmpty && start == n) {
+        final last = rows.removeLast();
+        rows.add(VerseRow(last.start, n, last.text));
+        start = null;
+      }
+      // else: leading empty — keep [start] and wait for the next text verse.
+    } else {
+      rows.add(VerseRow(start, n, t));
+      start = null;
+    }
+  }
+  return rows;
+}
+
+/// [foldNumbered] for a chapter's verses, numbered 1..N.
+List<VerseRow> verseRows(List<String> verses) =>
+    foldNumbered([for (var i = 0; i < verses.length; i++) (i + 1, verses[i])]);
 
 class BookRef {
   final int num;
   final String name;
-  BookRef(this.num, this.name);
+
+  /// Canonical reading position in the EOTC 81-book list (from manifest.json).
+  final int order;
+
+  /// 'old' | 'deuterocanonical' | 'new' (from manifest.json).
+  final String testament;
+
+  /// 1-based position within the displayed list (what the UI shows as the
+  /// book number). Distinct from [num], which is the asset file number.
+  int position = 0;
+
+  BookRef(this.num, this.name, {int? order, this.testament = 'old'}) : order = order ?? num;
+
+  bool get isNewTestament => testament == 'new';
 }
 
 class Chapter {
@@ -28,46 +88,88 @@ class BibleService {
   final Map<int, Book> _cache = {};
   List<BookRef>? _books;
 
-  Future<dynamic> _get(String path) async {
-    Object? lastErr;
-    for (var attempt = 0; attempt < 5; attempt++) {
-      try {
-        final res = await http
-            .get(Uri.parse('${Config.bibleApi}$path'))
-            .timeout(const Duration(seconds: 8));
-        if (res.statusCode != 200) {
-          throw Exception('Bible API ${res.statusCode}');
-        }
-        return jsonDecode(utf8.decode(res.bodyBytes));
-      } catch (e) {
-        lastErr = e;
-        if (attempt < 4) {
-          await Future.delayed(Duration(milliseconds: 300 * (attempt + 1)));
-        }
-      }
+  String _pad(int n) => n.toString().padLeft(2, '0');
+
+  Future<dynamic> _load(String file) async {
+    final raw = await rootBundle.loadString('assets/bible/$file');
+    return jsonDecode(raw);
+  }
+
+  /// Table of contents of the printed am-2000 "ሰማንያ አሐዱ" edition, in the
+  /// order it is printed. Books the edition does not print (Josippon and the
+  /// 8 extra NT books) are deliberately absent: the reader shows exactly what
+  /// the printed Bible shows. Asset ids come from manifest.json.
+  static const _printOld = [
+    'GEN', 'EXO', 'LEV', 'NUM', 'DEU', 'JOS', 'JDG', 'RUT', '1SA', '2SA',
+    '1KI', '2KI', '1CH', '2CH', 'JUB', 'ENO', 'EZR', 'NEH', '1ES', '2ES',
+    'TOB', 'JDT', 'EST', '1MA', '2MA', '3MA', 'JOB', 'PSA', 'PRO', '4MA',
+    'WIS', 'ECC', 'SNG', 'SIR', 'ISA', 'JER',
+    '1BA', // መጽሐፈ ባሮክ (1 Baruch), supplied from am-1980 — see build-bible.mjs
+    'LAM', 'LJE', 'BAR', // BAR file = ተረፈ ባሮክ, see _nameOverride
+    'EZK', 'DAN', 'HOS', 'AMO', 'MIC', 'JOL', 'OBA', 'JON', 'NAM', 'HAB',
+    'ZEP', 'HAG', 'ZEC', 'MAL',
+  ];
+  static const _printNew = [
+    'MAT', 'MRK', 'LUK', 'JHN', 'ACT', 'ROM', '1CO', '2CO', 'GAL', 'EPH',
+    'PHP', 'COL', '1TH', '2TH', '1TI', '2TI', 'TIT', 'PHM', 'HEB',
+    '1PE', '2PE', '1JN', '2JN', '3JN', 'JAS', 'JUD', 'REV',
+  ];
+
+  /// The dataset's "BAR" file actually holds ተረፈ ባሮክ (Paralipomena of
+  /// Jeremiah), not 1 Baruch. Label it truthfully.
+  static const _nameOverride = {'BAR': 'ተረፈ ባሮክ'};
+
+  /// Every book in the bundle keyed by file number (incl. unlisted ones), so
+  /// shared verses from any book still resolve to a name.
+  Map<int, BookRef>? _all;
+
+  /// Canon id ("JHN") -> bundle file number, for data keyed by canon id
+  /// such as the ግጻዌ lectionary.
+  Map<String, int>? _idToNum;
+
+  Future<void> _loadIndex() async {
+    if (_all != null) return;
+    final m = (await _load('manifest.json') as Map).cast<String, dynamic>();
+    final byId = <String, BookRef>{};
+    final all = <int, BookRef>{};
+    for (final b in (m['books_list'] as List)) {
+      final j = (b as Map).cast<String, dynamic>();
+      final id = (j['id'] ?? '').toString();
+      final ref = BookRef(
+        j['num'] as int,
+        _nameOverride[id] ?? (j['name'] ?? '').toString().trim(),
+        order: j['order'] as int?,
+        testament: (j['testament'] ?? 'old').toString(),
+      );
+      byId[id] = ref;
+      all[ref.num] = ref;
     }
-    throw lastErr ?? Exception('Bible API failed for $path');
+    final list = <BookRef>[];
+    for (final id in _printOld) {
+      final r = byId[id];
+      if (r != null) list.add(BookRef(r.num, r.name, order: r.order, testament: 'old'));
+    }
+    for (final id in _printNew) {
+      final r = byId[id];
+      if (r != null) list.add(BookRef(r.num, r.name, order: r.order, testament: 'new'));
+    }
+    for (var i = 0; i < list.length; i++) {
+      list[i].position = i + 1;
+    }
+    _all = all;
+    _books = list;
+    _idToNum = {for (final e in byId.entries) e.key: e.value.num};
   }
 
   Future<List<BookRef>> getBooks() async {
     if (_books != null) return _books!;
-    final arr = (await _get('/book') as List).cast<String>();
-    final reg = RegExp(r'^(\d+)\s*:\s*(.+)$');
-    final list = <BookRef>[];
-    for (final s in arr.skip(1)) {
-      final m = reg.firstMatch(s);
-      if (m != null) {
-        list.add(BookRef(int.parse(m.group(1)!), m.group(2)!.trim()));
-      }
-    }
-    list.sort((a, b) => a.num - b.num);
-    _books = list;
-    return list;
+    await _loadIndex();
+    return _books!;
   }
 
   Future<Book> getBook(int num) async {
     if (_cache.containsKey(num)) return _cache[num]!;
-    final j = await _get('/book/$num') as Map<String, dynamic>;
+    final j = await _load('${_pad(num)}.json') as Map<String, dynamic>;
     final chapters = (j['chapters'] as List)
         .map((c) => Chapter(
               (c['chapter'] ?? '').toString(),
@@ -75,13 +177,20 @@ class BibleService {
               (c['verses'] as List).map((v) => v.toString()).toList(),
             ))
         .toList();
-    final book = Book((j['title'] ?? '').toString(), chapters);
+    final title = _nameOverride[(j['id'] ?? '').toString()] ?? (j['title'] ?? '').toString();
+    final book = Book(title, chapters);
     _cache[num] = book;
     return book;
   }
 
+  /// Bundle file number for a canon id, or null if this edition lacks it.
+  Future<int?> numForId(String id) async {
+    await _loadIndex();
+    return _idToNum?[id];
+  }
+
   String? bookNameSync(int num) {
-    return _books?.where((b) => b.num == num).firstOrNull?.name;
+    return _all?[num]?.name ?? _books?.where((b) => b.num == num).firstOrNull?.name;
   }
 }
 

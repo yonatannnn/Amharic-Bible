@@ -4,6 +4,8 @@ import '../supabase.dart';
 import '../theme.dart';
 import '../state/settings.dart' as app;
 import '../services/push.dart';
+import '../services/daily.dart';
+import '../services/bible.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -12,6 +14,77 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
+  bool _inOrder = false;
+  int _startBook = 1;
+  int _startChapter = 1;
+  bool _planLoaded = false;
+  List<BookRef> _books = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBooks();
+    _loadPlan();
+  }
+
+  Future<void> _loadBooks() async {
+    try {
+      final books = await BibleService.instance.getBooks();
+      if (mounted) setState(() => _books = books);
+    } catch (_) {}
+  }
+
+  Future<void> _loadPlan() async {
+    final uid = supabase.auth.currentUser?.id;
+    if (uid == null) {
+      if (mounted) setState(() => _planLoaded = true);
+      return;
+    }
+    try {
+      final row = await supabase
+          .from('reading_plan')
+          .select('mode,start_book,start_chapter')
+          .eq('user_id', uid)
+          .maybeSingle();
+      if (!mounted) return;
+      setState(() {
+        if (row != null) {
+          _inOrder = row['mode'] == 'consecutive';
+          _startBook = ((row['start_book'] as int?) ?? 1).clamp(1, planBookCount);
+          _startChapter =
+              ((row['start_chapter'] as int?) ?? 1).clamp(1, chapterCounts[_startBook - 1]);
+        }
+        _planLoaded = true;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _planLoaded = true);
+    }
+  }
+
+  String _bookName(int num) {
+    for (final b in _books) {
+      if (b.num == num) return b.name;
+    }
+    return 'Book $num';
+  }
+
+  Future<void> _savePlan({required bool startDateToToday}) async {
+    final uid = supabase.auth.currentUser?.id;
+    if (uid == null) return;
+    try {
+      final data = <String, dynamic>{
+        'user_id': uid,
+        'mode': _inOrder ? 'consecutive' : 'random',
+        'start_book': _startBook,
+        'start_chapter': _startChapter,
+      };
+      if (startDateToToday) data['start_date'] = addisDay();
+      await supabase.from('reading_plan').upsert(data, onConflict: 'user_id');
+    } catch (_) {
+      if (mounted) _snack('Could not save reading plan');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = colorsOf(context);
@@ -26,6 +99,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           padding: const EdgeInsets.all(20),
           children: [
             _section(c, 'Reading', _readingCard(c)),
+            const SizedBox(height: 26),
+            _section(c, 'Daily chapter', _dailyChapterCard(c)),
             const SizedBox(height: 26),
             _section(c, 'Account', _accountCard(c)),
             const SizedBox(height: 26),
@@ -94,6 +169,103 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     ]);
   }
+
+  Widget _dailyChapterCard(AppColors c) {
+    final chapterMax = chapterCounts[_startBook - 1];
+    return _card(c, [
+      SwitchListTile(
+        contentPadding: EdgeInsets.zero,
+        title: const Text('Read the Bible in order'),
+        subtitle: Text(
+          'Advance one chapter each day from a starting point.',
+          style: TextStyle(color: c.inkFaint, fontSize: 12),
+        ),
+        value: _inOrder,
+        activeThumbColor: c.brand,
+        onChanged: _planLoaded
+            ? (v) {
+                setState(() => _inOrder = v);
+                _savePlan(startDateToToday: true);
+              }
+            : null,
+      ),
+      if (_inOrder) ...[
+        Divider(color: c.line, height: 1),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('Start from', style: TextStyle(color: c.inkSoft, fontSize: 14)),
+            const SizedBox(height: 8),
+            Row(children: [
+              Expanded(
+                flex: 3,
+                child: DropdownButtonFormField<int>(
+                  initialValue: _startBook,
+                  isExpanded: true,
+                  decoration: _pickerDecoration(c),
+                  dropdownColor: c.surface,
+                  items: [
+                    for (var b = 1; b <= planBookCount; b++)
+                      DropdownMenuItem(
+                        value: b,
+                        child: Text(_bookName(b), overflow: TextOverflow.ellipsis),
+                      ),
+                  ],
+                  onChanged: (b) {
+                    if (b == null) return;
+                    setState(() {
+                      _startBook = b;
+                      if (_startChapter > chapterCounts[b - 1]) {
+                        _startChapter = chapterCounts[b - 1];
+                      }
+                    });
+                    _savePlan(startDateToToday: true);
+                  },
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                flex: 2,
+                child: DropdownButtonFormField<int>(
+                  initialValue: _startChapter.clamp(1, chapterMax),
+                  isExpanded: true,
+                  decoration: _pickerDecoration(c),
+                  dropdownColor: c.surface,
+                  items: [
+                    for (var ch = 1; ch <= chapterMax; ch++)
+                      DropdownMenuItem(value: ch, child: Text('Ch $ch')),
+                  ],
+                  onChanged: (ch) {
+                    if (ch == null) return;
+                    setState(() => _startChapter = ch);
+                    _savePlan(startDateToToday: true);
+                  },
+                ),
+              ),
+            ]),
+            const SizedBox(height: 10),
+            Text(
+              'Today shows your chosen chapter; it advances one chapter each day.',
+              style: TextStyle(color: c.inkFaint, fontSize: 12),
+            ),
+          ]),
+        ),
+      ],
+    ]);
+  }
+
+  InputDecoration _pickerDecoration(AppColors c) => InputDecoration(
+        isDense: true,
+        filled: true,
+        fillColor: c.surface2,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: c.line)),
+        enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: c.line)),
+        focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: c.brand)),
+      );
 
   Widget _accountCard(AppColors c) {
     return _card(c, [

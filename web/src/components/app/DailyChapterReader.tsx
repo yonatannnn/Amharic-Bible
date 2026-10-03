@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ShareBar, type ShareFriend } from "@/components/reader/ShareBar";
+import { verseRows } from "@/lib/verseRows";
 
 export function DailyChapterReader({
   book,
@@ -97,12 +98,12 @@ export function DailyChapterReader({
 
       {/* full chapter — verse per line, tappable */}
       <div className="reader-text px-[1.5em] pb-[1.2em] pt-[0.6em] text-ink [font-family:var(--font-eth-serif)]">
-        {verses.map((v, i) => {
-          const n = i + 1;
-          const selected = sel != null && n >= sel.start && n <= sel.end;
+        {verseRows(verses).map((row) => {
+          const n = row.start;
+          const selected = sel != null && row.end >= sel.start && row.start <= sel.end;
           return (
             <div
-              key={i}
+              key={n}
               onClick={() => tapVerse(n)}
               className={`flex cursor-pointer gap-[0.75em] rounded-lg px-[0.4em] py-[0.15em] transition-colors ${
                 selected ? "bg-brand text-brand-ink" : "hover:bg-surface-2"
@@ -113,9 +114,9 @@ export function DailyChapterReader({
                   selected ? "text-brand-ink/70" : "text-gold/70"
                 }`}
               >
-                {n}
+                {row.label}
               </span>
-              <span className="flex-1">{v}</span>
+              <span className="flex-1">{row.text}</span>
             </div>
           );
         })}

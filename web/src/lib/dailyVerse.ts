@@ -1,4 +1,6 @@
 import { getBook } from "@/lib/bible";
+import { BOOK_COUNT } from "@/lib/bibleCanon";
+import { refMtToLxx } from "@/lib/psalms";
 import { generateJSON } from "@/lib/gemini";
 import { createClient } from "@/lib/supabase/server";
 
@@ -7,7 +9,7 @@ type Ref = { book: number; chapter: number; verse: number };
 // Fallback pool used if Gemini is unavailable. Text always comes from the API.
 const FALLBACK: Ref[] = [
   { book: 43, chapter: 3, verse: 16 },
-  { book: 19, chapter: 23, verse: 1 },
+  { book: 19, chapter: 22, verse: 1 }, // Psalm 23 (LXX 22)
   { book: 50, chapter: 4, verse: 13 },
   { book: 24, chapter: 29, verse: 11 },
   { book: 20, chapter: 3, verse: 5 },
@@ -15,9 +17,9 @@ const FALLBACK: Ref[] = [
   { book: 45, chapter: 8, verse: 28 },
   { book: 6, chapter: 1, verse: 9 },
   { book: 40, chapter: 11, verse: 28 },
-  { book: 19, chapter: 46, verse: 1 },
+  { book: 19, chapter: 45, verse: 1 }, // Psalm 46 (LXX 45)
   { book: 50, chapter: 4, verse: 6 },
-  { book: 19, chapter: 121, verse: 1 },
+  { book: 19, chapter: 120, verse: 1 }, // Psalm 121 (LXX 120)
 ];
 
 export type DailyVerse = {
@@ -45,11 +47,14 @@ const POOL_SCHEMA = {
 } as const;
 
 function validRefs(refs: Ref[]): Ref[] {
+  // Gemini answers in Masoretic psalm numbers whatever the prompt says; the
+  // bundled edition is Septuagint. Convert rather than hope.
+  refs = refs.map((r) => refMtToLxx(r));
   const valid = refs.filter(
     (r) =>
       Number.isInteger(r.book) &&
       r.book >= 1 &&
-      r.book <= 66 &&
+      r.book <= BOOK_COUNT &&
       r.chapter >= 1 &&
       r.verse >= 1,
   );
@@ -69,12 +74,15 @@ export async function generateVersePool(exclude: Ref[] = []): Promise<Ref[]> {
     const refs = await generateJSON<Ref[]>(
       `You are curating uplifting daily Bible verses for an Amharic Bible app.
 Return 18 well-known, encouraging verse REFERENCES (do NOT write the verse text).
-Use the Protestant 66-book order with these book NUMBERS:
-1=Genesis … 19=Psalms, 20=Proverbs, 23=Isaiah, 40=Matthew, 43=John, 45=Romans,
-50=Philippians … 66=Revelation.
+Use these book NUMBERS (Ethiopian Orthodox 81-book canon; 1-66 follow the
+familiar order): 1=Genesis … 19=Psalms, 20=Proverbs, 23=Isaiah, 40=Matthew,
+43=John, 45=Romans, 50=Philippians … 66=Revelation, then 67=Tobit, 68=Judith,
+69=Wisdom, 70=Sirach, 71=Baruch, 80=Enoch.
+Use the ordinary Protestant psalm numbers you know (Psalm 23, 91, 121) — they
+are converted to this edition's numbering afterwards.
 Vary the books — draw from many different books, not just Psalms and John.
 Choose verses that are genuinely comforting, hopeful, or faith-building.${excludeLine}
-Return a JSON array of objects: {"book":<1-66>,"chapter":<int>,"verse":<int>}.`,
+Return a JSON array of objects: {"book":<1-89>,"chapter":<int>,"verse":<int>}.`,
       POOL_SCHEMA,
     );
     const excludeKeys = new Set(

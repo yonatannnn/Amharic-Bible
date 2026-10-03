@@ -70,10 +70,17 @@ Deno.serve(async (req) => {
       }
       const botUser = await getBotUsername(token);
       const botLink = botUser ? `https://t.me/${botUser}` : "";
-      const footer = botUser ? `\n\n— <a href="${botLink}">@${botUser}</a> · የዕለቱ ቃል` : "";
+      const footer = botLink ? `\n\n<a href="${botLink}">የዕለቱ ቃል</a>` : "";
+      // Same cap as telegram-verse: long Amharic text overflows reply markup.
+      let shareText = `📖 ${v.ref}\n\n${v.text}`;
+      let encodedShare = encodeURIComponent(shareText);
+      if (encodedShare.length > 3000) {
+        shareText = shareText.slice(0, Math.floor((shareText.length * 3000) / encodedShare.length) - 1) + "…";
+        encodedShare = encodeURIComponent(shareText);
+      }
       const shareUrl =
         `https://t.me/share/url?url=${encodeURIComponent(botLink || "https://t.me")}` +
-        `&text=${encodeURIComponent(`📖 ${v.ref}\n\n${v.text}`)}`;
+        `&text=${encodedShare}`;
       const replyMarkup = botUser
         ? { inline_keyboard: [[{ text: "📤 Share verse", url: shareUrl }]] }
         : undefined;
@@ -91,7 +98,7 @@ Deno.serve(async (req) => {
 
       const botUser = await getBotUsername(token);
       const botLink = botUser ? `https://t.me/${botUser}` : "";
-      const footer = botUser ? `\n\n— <a href="${botLink}">@${botUser}</a> · የዕለቱ ቃል` : "";
+      const footer = botLink ? `\n\n<a href="${botLink}">የዕለቱ ቃል</a>` : "";
       const shareUrl =
         `https://t.me/share/url?url=${encodeURIComponent(botLink || "https://t.me")}` +
         `&text=${encodeURIComponent("📖 Get the verse of the day in Amharic, every morning.")}`;

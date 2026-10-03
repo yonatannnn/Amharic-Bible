@@ -83,14 +83,14 @@ class _ReaderScreenState extends State<ReaderScreen> {
     final f = _filter.trim().toLowerCase();
     final filtered = f.isEmpty
         ? _books!
-        : _books!.where((b) => b.name.toLowerCase().contains(f) || '${b.num}'.contains(f)).toList();
+        : _books!.where((b) => b.name.toLowerCase().contains(f) || '${b.position}'.contains(f)).toList();
 
     final children = <Widget>[];
     if (f.isEmpty) {
       children.add(_sectionHeader(c, 'ብሉይ ኪዳን · Old Testament'));
-      children.addAll(_books!.where((b) => b.num <= 39).map((b) => _bookRow(c, b)));
+      children.addAll(_books!.where((b) => !b.isNewTestament).map((b) => _bookRow(c, b)));
       children.add(_sectionHeader(c, 'አዲስ ኪዳን · New Testament'));
-      children.addAll(_books!.where((b) => b.num >= 40).map((b) => _bookRow(c, b)));
+      children.addAll(_books!.where((b) => b.isNewTestament).map((b) => _bookRow(c, b)));
     } else if (filtered.isEmpty) {
       children.add(Padding(
         padding: const EdgeInsets.all(24),
@@ -137,7 +137,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
             Container(
               width: 30, height: 30, alignment: Alignment.center,
               decoration: BoxDecoration(color: c.surface2, borderRadius: BorderRadius.circular(9)),
-              child: Text('${b.num}', style: display(context, size: 12, weight: FontWeight.w600, color: c.inkFaint)),
+              child: Text('${b.position}', style: display(context, size: 12, weight: FontWeight.w600, color: c.inkFaint)),
             ),
             const SizedBox(width: 12),
             Expanded(child: Text(b.name, style: amharic(context, size: 15.5, weight: FontWeight.w500))),
@@ -209,13 +209,13 @@ class _ReaderScreenState extends State<ReaderScreen> {
                 style: TextStyle(color: c.inkFaint, fontSize: 10, letterSpacing: 0.8, fontWeight: FontWeight.w600)),
           ]),
           const SizedBox(height: 18),
-          for (var i = 0; i < verses.length; i++)
+          for (final row in verseRows(verses))
             VerseTile(
-              n: i + 1,
-              text: verses[i],
+              label: row.label,
+              text: row.text,
               size: size,
-              selected: hasSel && (i + 1) >= _selStart! && (i + 1) <= _selEnd!,
-              onTap: () => _tapVerse(i + 1),
+              selected: hasSel && row.end >= _selStart! && row.start <= _selEnd!,
+              onTap: () => _tapVerse(row.start),
             ),
           const SizedBox(height: 24),
           Row(children: [
@@ -237,7 +237,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
           child: SafeArea(child: Builder(builder: (_) {
             final s = _selStart!, e = _selEnd!;
             final range = s == e ? '$s' : '$s-$e';
-            final text = verses.sublist(s - 1, e).join(' ');
+            final text = verses.sublist(s - 1, e).where((t) => t.trim().isNotEmpty).join(' ');
             final ref = '$bookTitle $_chapter:$range';
             return VerseShareBar(
               book: _book!, chapter: _chapter!, start: s, end: e, ref: ref, text: text,

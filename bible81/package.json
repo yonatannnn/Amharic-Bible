@@ -1,0 +1,13 @@
+{
+  "name": "bible81",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Local API over the EOTC 81-book canon (Nehemiah Open Source / 80-weahadu data).",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "engines": { "node": ">=20" }
+}

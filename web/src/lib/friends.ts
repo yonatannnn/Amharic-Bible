@@ -10,6 +10,8 @@ export type Streak = {
   broken: boolean;
   broken_at: string | null;
   restores_remaining: number;
+  restorable_count: number | null;
+  restorable_at: string | null;
 };
 
 export type FriendInfo = {

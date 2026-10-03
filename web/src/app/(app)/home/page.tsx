@@ -4,11 +4,13 @@ import { getCurrentProfile } from "@/lib/profile";
 import { getMyFriends, getIncomingRequests } from "@/lib/friends";
 import { getDailyVerse } from "@/lib/dailyVerse";
 import { getTodaysReading } from "@/lib/readingPlan";
+import { getTodaysGitsawe } from "@/lib/gitsawe";
 import { getChapter } from "@/lib/bible";
 import { StreakCard } from "@/components/app/StreakCard";
 import { StreaksList } from "@/components/app/StreaksList";
 import { DailyChapterReader } from "@/components/app/DailyChapterReader";
 import { AdminVerseControls } from "@/components/app/AdminVerseControls";
+import { GitsaweCard } from "@/components/app/GitsaweCard";
 import { RealtimeRefresher } from "@/components/app/RealtimeRefresher";
 
 export const metadata = { title: "Home · መጽሐፍ ቅዱስ" };
@@ -42,7 +44,12 @@ export default async function HomePage() {
         <VerseHero isAdmin={profile?.is_admin ?? false} />
       </Suspense>
 
-      {/* 2 · chapter + requests + streaks — streams in */}
+      {/* 2 · today's ግጻዌ readings — streams in */}
+      <Suspense fallback={null}>
+        <Gitsawe />
+      </Suspense>
+
+      {/* 3 · chapter + requests + streaks — streams in */}
       <Suspense fallback={<BelowSkeleton />}>
         <BelowVerse userId={profile!.id} />
       </Suspense>
@@ -93,6 +100,15 @@ async function VerseHero({ isAdmin }: { isAdmin: boolean }) {
       </div>
     </section>
   );
+}
+
+/* ── today's ግጻዌ ────────────────────────────────────────────── */
+async function Gitsawe() {
+  const data = await getTodaysGitsawe();
+  if (!data) return null;
+  // A handful of days in the source tables carry no Qidase readings at all.
+  if (!data.gospel && data.qidase.length === 0) return null;
+  return <GitsaweCard data={data} />;
 }
 
 /* ── chapter + requests + streaks ───────────────────────────── */

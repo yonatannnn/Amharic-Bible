@@ -5,6 +5,10 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { getBooks, getBook, type Book, type BookRef } from "@/lib/bible";
 import { ClickableAvatar } from "./ClickableAvatar";
+import { VerseRangePicker } from "./VerseRangePicker";
+import { EmojiPicker } from "./EmojiPicker";
+
+export type Reaction = { user_id: string; emoji: string };
 
 export type ChatMessage = {
   id: string;
@@ -48,8 +52,61 @@ export function ChatRoom({
   const [text, setText] = useState("");
   const [picking, setPicking] = useState(false);
   const [books, setBooks] = useState<BookRef[]>([]);
+  // messageId -> reactions[]
+  const [reactions, setReactions] = useState<Record<string, Reaction[]>>({});
   const seen = useRef(new Set(initialMessages.map((m) => m.id)));
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  // local helper: merge/replace one user's reaction for a message
+  const applyReaction = useCallback(
+    (messageId: string, userId: string, emoji: string | null) => {
+      setReactions((prev) => {
+        const list = prev[messageId] ?? [];
+        const without = list.filter((r) => r.user_id !== userId);
+        const next = emoji ? [...without, { user_id: userId, emoji }] : without;
+        return { ...prev, [messageId]: next };
+      });
+    },
+    [],
+  );
+
+  // load all reactions for this friendship on mount
+  useEffect(() => {
+    supabase
+      .from("message_reactions")
+      .select("message_id,user_id,emoji")
+      .eq("friendship_id", friendshipId)
+      .then(({ data }) => {
+        if (!data) return;
+        const map: Record<string, Reaction[]> = {};
+        for (const r of data as { message_id: string; user_id: string; emoji: string }[]) {
+          (map[r.message_id] ??= []).push({ user_id: r.user_id, emoji: r.emoji });
+        }
+        setReactions(map);
+      });
+  }, [supabase, friendshipId]);
+
+  // toggle the current user's reaction on a message (optimistic)
+  const toggleReaction = useCallback(
+    async (messageId: string, emoji: string) => {
+      const mine = (reactions[messageId] ?? []).find((r) => r.user_id === myId);
+      if (mine && mine.emoji === emoji) {
+        applyReaction(messageId, myId, null);
+        await supabase
+          .from("message_reactions")
+          .delete()
+          .eq("message_id", messageId)
+          .eq("user_id", myId);
+      } else {
+        applyReaction(messageId, myId, emoji);
+        await supabase.from("message_reactions").upsert(
+          { message_id: messageId, user_id: myId, friendship_id: friendshipId, emoji },
+          { onConflict: "message_id,user_id" },
+        );
+      }
+    },
+    [reactions, myId, friendshipId, supabase, applyReaction],
+  );
 
   const bookName = useCallback(
     (n: number | null) => (n ? books.find((b) => b.num === n)?.name ?? `Book ${n}` : ""),
@@ -130,11 +187,30 @@ export function ChatRoom({
         },
         () => refreshStreak(),
       )
+      // live reactions
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "message_reactions",
+          filter: `friendship_id=eq.${friendshipId}`,
+        },
+        (payload) => {
+          if (payload.eventType === "DELETE") {
+            const r = payload.old as { message_id?: string; user_id?: string };
+            if (r.message_id && r.user_id) applyReaction(r.message_id, r.user_id, null);
+          } else {
+            const r = payload.new as { message_id: string; user_id: string; emoji: string };
+            applyReaction(r.message_id, r.user_id, r.emoji);
+          }
+        },
+      )
       .subscribe();
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [supabase, friendshipId, refreshStreak, markRead, friend.id]);
+  }, [supabase, friendshipId, refreshStreak, markRead, friend.id, applyReaction]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: "end" });
@@ -230,7 +306,14 @@ export function ChatRoom({
               return (
                 <div key={m.id}>
                   {showDay && <DaySeparator iso={m.created_at} />}
-                  <Bubble m={m} mine={mine} bookName={bookName} />
+                  <Bubble
+                    m={m}
+                    mine={mine}
+                    myId={myId}
+                    bookName={bookName}
+                    reactions={reactions[m.id] ?? []}
+                    onReact={(emoji) => toggleReaction(m.id, emoji)}
+                  />
                 </div>
               );
             })}
@@ -267,7 +350,7 @@ export function ChatRoom({
       </div>
 
       {picking && (
-        <VersePicker books={books} onClose={() => setPicking(false)} onSend={sendVerse} />
+        <VerseRangePicker books={books} onClose={() => setPicking(false)} onSend={sendVerse} />
       )}
     </div>
   );
@@ -300,16 +383,54 @@ function fmtTime(iso: string) {
   });
 }
 
+/* ---------------- copy helpers ---------------- */
+async function verseTextForCopy(m: ChatMessage, bookName: (n: number | null) => string) {
+  if (!m.book || !m.chapter) return "";
+  const b = await bookCached(m.book);
+  const ch = b.chapters[m.chapter - 1];
+  const s = (m.verse_start ?? 1) - 1;
+  const e = (m.verse_end ?? m.verse_start ?? 1) - 1;
+  const body = ch.verses.slice(s, e + 1).join(" ");
+  const range =
+    m.verse_end && m.verse_end !== m.verse_start
+      ? `${m.verse_start}-${m.verse_end}`
+      : `${m.verse_start}`;
+  return `${bookName(m.book)} ${m.chapter}:${range} — ${body}`;
+}
+
 /* ---------------- message bubble ---------------- */
 function Bubble({
   m,
   mine,
+  myId,
   bookName,
+  reactions,
+  onReact,
 }: {
   m: ChatMessage;
   mine: boolean;
+  myId: string;
   bookName: (n: number | null) => string;
+  reactions: Reaction[];
+  onReact: (emoji: string) => void;
 }) {
+  const [showPicker, setShowPicker] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const copy = useCallback(async () => {
+    let payload = "";
+    if (m.type === "verse") payload = await verseTextForCopy(m, bookName);
+    else payload = m.text ?? "";
+    if (!payload) return;
+    try {
+      await navigator.clipboard.writeText(payload);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* ignore clipboard failures */
+    }
+  }, [m, bookName]);
+
   let content: React.ReactNode;
   if (m.type === "verse") {
     content = <VerseBubble m={m} mine={mine} bookName={bookName} />;
@@ -339,9 +460,73 @@ function Bubble({
     );
   }
 
+  // toolbar sits beside the bubble; visible on hover (desktop) and always
+  // tappable (the affordance keeps its own state open on touch via focus-within)
+  const toolbar = (
+    <div
+      className={`flex items-center gap-0.5 self-center opacity-0 transition group-hover:opacity-100 group-focus-within:opacity-100 ${
+        showPicker || copied ? "opacity-100" : ""
+      }`}
+    >
+      <button
+        onClick={() => setShowPicker((v) => !v)}
+        title="React"
+        className="grid h-7 w-7 place-items-center rounded-full text-sm text-ink-soft hover:bg-surface-2"
+      >
+        😊
+      </button>
+      <button
+        onClick={copy}
+        title="Copy"
+        className="grid h-7 w-7 place-items-center rounded-full text-sm text-ink-soft hover:bg-surface-2"
+      >
+        ⧉
+      </button>
+    </div>
+  );
+
   return (
-    <div className={`mb-1.5 flex flex-col ${mine ? "items-end" : "items-start"}`}>
-      {content}
+    <div className={`group mb-1.5 flex flex-col ${mine ? "items-end" : "items-start"}`}>
+      <div className={`relative flex items-center gap-1 ${mine ? "flex-row" : "flex-row-reverse"}`}>
+        {toolbar}
+        <div className="relative">
+          {content}
+          {showPicker && (
+            <EmojiPicker
+              anchorMine={mine}
+              onClose={() => setShowPicker(false)}
+              onPick={(emoji) => {
+                onReact(emoji);
+                setShowPicker(false);
+              }}
+            />
+          )}
+        </div>
+      </div>
+
+      {/* reaction pills */}
+      {reactions.length > 0 && (
+        <div className={`mt-0.5 flex flex-wrap gap-1 px-1 ${mine ? "justify-end" : "justify-start"}`}>
+          {reactions.map((r) => {
+            const isMine = r.user_id === myId;
+            return (
+              <button
+                key={r.user_id}
+                onClick={() => isMine && onReact(r.emoji)}
+                title={isMine ? "Remove your reaction" : undefined}
+                className={`rounded-full border px-1.5 py-0.5 text-xs leading-none shadow-card ${
+                  isMine
+                    ? "border-brand/40 bg-brand-soft text-brand"
+                    : "border-line bg-surface text-ink"
+                }`}
+              >
+                {r.emoji}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       <div className="mt-0.5 flex items-center gap-1 px-1 text-[10px] text-ink-faint">
         <span>{fmtTime(m.created_at)}</span>
         {mine && (
@@ -349,6 +534,7 @@ function Bubble({
             {m.read_at ? "✓✓" : "✓"}
           </span>
         )}
+        {copied && <span className="font-medium text-brand">Copied ✓</span>}
       </div>
     </div>
   );
@@ -394,133 +580,6 @@ function VerseBubble({
         <p className="amharic mt-1.5 text-[15px] leading-relaxed text-ink">
           {verseText ?? "…"}
         </p>
-      </div>
-    </div>
-  );
-}
-
-/* ---------------- verse picker modal ---------------- */
-function VersePicker({
-  books,
-  onClose,
-  onSend,
-}: {
-  books: BookRef[];
-  onClose: () => void;
-  onSend: (book: number, chapter: number, start: number, end: number) => void;
-}) {
-  const [book, setBook] = useState<number | null>(null);
-  const [data, setData] = useState<Book | null>(null);
-  const [chapter, setChapter] = useState<number | null>(null);
-  const [start, setStart] = useState<number | null>(null);
-  const [end, setEnd] = useState<number | null>(null);
-
-  useEffect(() => {
-    if (book == null) return;
-    setData(null);
-    setChapter(null);
-    setStart(null);
-    setEnd(null);
-    bookCached(book).then(setData).catch(() => {});
-  }, [book]);
-
-  const chap = data && chapter ? data.chapters[chapter - 1] : null;
-
-  function tapVerse(v: number) {
-    if (start == null || (start != null && end != null)) {
-      setStart(v);
-      setEnd(v);
-    } else if (v >= start) {
-      setEnd(v);
-    } else {
-      setStart(v);
-      setEnd(v);
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 sm:items-center">
-      <div className="flex h-[85dvh] w-full max-w-lg flex-col rounded-t-2xl bg-surface sm:rounded-2xl">
-        <div className="flex items-center justify-between border-b border-line px-4 py-3">
-          <h3 className="font-bold">Share a verse</h3>
-          <button onClick={onClose} className="text-ink-soft">
-            ✕
-          </button>
-        </div>
-
-        <div className="flex gap-2 border-b border-line p-3">
-          <select
-            value={book ?? ""}
-            onChange={(e) => setBook(e.target.value ? +e.target.value : null)}
-            className="amharic flex-1 rounded-lg border border-line bg-surface-2 px-3 py-2 text-sm outline-none"
-          >
-            <option value="">Book…</option>
-            {books.map((b) => (
-              <option key={b.num} value={b.num}>
-                {b.num}. {b.name}
-              </option>
-            ))}
-          </select>
-          <select
-            value={chapter ?? ""}
-            onChange={(e) => {
-              setChapter(e.target.value ? +e.target.value : null);
-              setStart(null);
-              setEnd(null);
-            }}
-            disabled={!data}
-            className="w-28 rounded-lg border border-line bg-surface-2 px-3 py-2 text-sm outline-none disabled:opacity-50"
-          >
-            <option value="">Ch…</option>
-            {data?.chapters.map((_, i) => (
-              <option key={i} value={i + 1}>
-                {i + 1}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-4">
-          {!chap ? (
-            <p className="mt-10 text-center text-sm text-ink-faint">
-              Pick a book and chapter, then tap verses (tap two to select a range).
-            </p>
-          ) : (
-            <div className="reader-text">
-              {chap.verses.map((v, i) => {
-                const n = i + 1;
-                const selected =
-                  start != null && end != null && n >= start && n <= end;
-                return (
-                  <span
-                    key={i}
-                    onClick={() => tapVerse(n)}
-                    className={`cursor-pointer rounded-lg px-1 py-0.5 ${
-                      selected ? "bg-brand text-white" : "hover:bg-surface-2"
-                    }`}
-                  >
-                    <sup className="mr-1 select-none font-sans text-[0.7em] font-bold opacity-70">
-                      {n}
-                    </sup>
-                    {v}{" "}
-                  </span>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        <div className="border-t border-line p-3">
-          <button
-            disabled={book == null || chapter == null || start == null}
-            onClick={() => onSend(book!, chapter!, start!, end ?? start!)}
-            className="w-full rounded-xl bg-brand px-4 py-3 text-sm font-semibold text-white disabled:opacity-40"
-          >
-            {start != null
-              ? `Share verse${end && end !== start ? `s ${start}-${end}` : ` ${start}`} 🔥`
-              : "Select a verse"}
-          </button>
-        </div>
       </div>
     </div>
   );
