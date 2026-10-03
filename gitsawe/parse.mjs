@@ -21,7 +21,7 @@ import { readFileSync, writeFileSync, readdirSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { parseRefs } from '../bible81/src/ref.js';
-import { byId } from '../bible81/src/canon.js';
+import { byId, resolveBook } from '../bible81/src/canon.js';
 import { gregorianToEthiopian, ETHIOPIAN_MONTHS } from './ethiopic.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -167,18 +167,49 @@ function parseMonth(monthIndex, file) {
   return { monthIndex, days: [...merged.values()].sort((a, b) => a.day - b.day) };
 }
 
+/** A book name followed by a chapter number, anywhere in a cell. */
+const BOOK_AT = /(?<=^|\s)((?:[1-4]\s*)?[A-Za-z][A-Za-z.]{0,4})\s*\d/g;
+
+/**
+ * Split a cell that holds two references separated by a single space.
+ *
+ * A handful of rows typeset the misbak and the Gospel in the same column —
+ * "Ps 92 : 4, 5 Luk 24:13-33" — where every other day puts them on their own
+ * lines. `cells()` splits on two or more spaces, so the pair arrives here as
+ * one cell, and `parseRefs` only splits on ";" — it reads the book as Ps and
+ * swallows "Luk 24" into the verse list, losing the Gospel entirely.
+ *
+ * Cut at every book name after the first, but only if BOTH halves still parse.
+ * That guard keeps multi-word book names ("Song of Songs 2") in one piece.
+ */
+function splitCell(cell) {
+  const cuts = [];
+  for (const m of cell.matchAll(BOOK_AT)) {
+    if (m.index > 0 && resolveBook(m[1])) cuts.push(m.index);
+  }
+  if (!cuts.length) return [cell];
+  const parts = [];
+  let prev = 0;
+  for (const c of [...cuts, cell.length]) { parts.push(cell.slice(prev, c).trim()); prev = c; }
+  const usable = parts.filter(Boolean);
+  const parses = (p) => parseRefs(p).some((r) => !r.error && r.book);
+  return usable.length > 1 && usable.every(parses) ? usable : [cell];
+}
+
 /** Resolve raw cell text into structured references. */
 function resolve(raw) {
   const out = [];
   for (const cell of raw) {
-    for (const r of parseRefs(cell)) {
-      if (r.error || !r.book) continue;
-      out.push({ ref: `${r.book} ${r.chapter}`, book: r.book, chapter: r.chapter,
-                 ...(r.start != null ? { start: r.start } : {}),
-                 ...(r.end != null ? { end: r.end } : {}),
-                 ...(r.toEnd ? { toEnd: true } : {}),
-                 ...(r.list ? { list: r.list } : {}),
-                 raw: cell });
+    for (const part of splitCell(cell)) {
+      for (const r of parseRefs(part)) {
+        if (r.error || !r.book) continue;
+        out.push({ ref: `${r.book} ${r.chapter}`, book: r.book, chapter: r.chapter,
+                   ...(r.start != null ? { start: r.start } : {}),
+                   ...(r.end != null ? { end: r.end } : {}),
+                   ...(r.toEnd ? { toEnd: true } : {}),
+                   ...(r.list ? { list: r.list } : {}),
+                   raw: part });
+      }
     }
   }
   return out;
@@ -274,6 +305,13 @@ console.log(`ስንክሳር: ${sinksarDays} days matched, ${sinksarEntries} com
 console.log(`total days in file: ${Object.keys(days).length}`);
 
 // ---- distribute to both apps ------------------------------------------------
+// The Telegram bots bundle their own copy (the Edge Function cannot fetch it
+// at cold start), so it has to be rewritten here too — a stale copy there is
+// invisible until a day's reading silently goes missing.
+const BOT_DATA = join(HERE, '..', 'web', 'supabase', 'functions', '_shared', 'gitsawe-data.json');
+writeFileSync(BOT_DATA, JSON.stringify(out));
+console.log(`distributed -> ${BOT_DATA}`);
+
 const targets = [
   join(HERE, '..', 'web', 'public'),
   join(HERE, '..', 'mobile', 'assets'),
