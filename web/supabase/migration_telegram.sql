@@ -25,7 +25,8 @@ select cron.schedule('telegram-verse', '0 3 * * *', $$
   select net.http_post(
     url := 'https://zzbnwnhwucaneqqaxiqb.supabase.co/functions/v1/telegram-verse',
     headers := jsonb_build_object('Content-Type','application/json','Authorization','Bearer <CRON_SECRET>'),
-    body := '{}'::jsonb
+    body := '{}'::jsonb,
+    timeout_milliseconds := 60000  -- pg_net default is 5000ms; a cold start + 13 sends exceeds it
   );
 $$);
 

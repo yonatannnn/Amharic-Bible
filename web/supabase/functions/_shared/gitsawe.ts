@@ -121,7 +121,7 @@ async function resolve(ref: Ref, slot: string): Promise<Reading | null> {
     bookNum,
     chapter: ref.chapter,
     verses: picked,
-    text: picked.map((v) => v.t).join(" "),
+    text: picked.map((v) => v.t).filter((t) => t.trim()).join(" "),
   };
 }
 

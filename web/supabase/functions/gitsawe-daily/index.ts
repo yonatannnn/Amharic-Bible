@@ -21,8 +21,26 @@ const esc = (s: string) =>
  * closest marker. A single newline, not a blank line — a blank line between
  * every verse spreads a 16-verse reading over a whole screen.
  */
-const numbered = (verses: Verse[]) =>
-  verses.map((v) => `<b>${v.n}</b> ${esc(v.t)}`).join("\n");
+const numbered = (verses: Verse[]) => {
+  // Fold the am-2000 "empty verses" (lost verse boundaries: verse N holds
+  // N+1's text) into the verse that carries their text — never print a bare
+  // number with nothing after it.
+  const rows: { start: number; end: number; t: string }[] = [];
+  let start: number | null = null;
+  for (const v of verses) {
+    if (start == null) start = v.n;
+    if (!v.t.trim()) {
+      const last = rows[rows.length - 1];
+      if (last && start === v.n) { last.end = v.n; start = null; }
+    } else {
+      rows.push({ start, end: v.n, t: v.t });
+      start = null;
+    }
+  }
+  return rows
+    .map((r) => `<b>${r.start === r.end ? r.start : `${r.start}-${r.end}`}</b> ${esc(r.t)}`)
+    .join("\n");
+};
 
 // Telegram rejects anything over 4096 characters. The Gospel often runs to the
 // end of a chapter, so split on sentence boundaries rather than truncating —
@@ -102,7 +120,11 @@ Deno.serve(async (req) => {
 
     const g = await todaysGitsawe(when);
     if (!g?.gospel) {
-      // Six days a year genuinely carry no Gospel in the source tables.
+      // Three days a year (ጥቅምት ፳፭, ጥር ፯, የካቲት ፳፫) carry no Gospel in the
+      // source tables. Three others used to land here too — the parser was
+      // dropping a Gospel typeset in the misbak column; see splitCell() in
+      // gitsawe/parse.mjs. If a new day starts returning this, re-check the
+      // parser before assuming the table is blank.
       return new Response(JSON.stringify({ sent: 0, reason: "no gospel for this day" }), {
         status: 200, headers: { "Content-Type": "application/json" },
       });
@@ -123,9 +145,19 @@ Deno.serve(async (req) => {
       (g.anaphora != null ? `\n<i>ቅዳሴ · አናፎራ ${g.anaphora}</i>` : "") +
       (botLink ? `\n\n<a href="${botLink}">የዕለቱ ወንጌል</a>` : "");
 
+    // Telegram rejects reply markup over a few KB, and Amharic percent-encodes
+    // at ~9 bytes per character — so cap the ENCODED share text, not its
+    // character count (a full chapter once produced a 12.8KB URL and every
+    // send failed with "reply markup is too long").
+    let shareText = `📖 ${g.gospel.label}\n\n${g.gospel.text}`;
+    let encoded = encodeURIComponent(shareText);
+    if (encoded.length > 3000) {
+      shareText = shareText.slice(0, Math.floor((shareText.length * 3000) / encoded.length) - 1) + "…";
+      encoded = encodeURIComponent(shareText);
+    }
     const shareUrl =
       `https://t.me/share/url?url=${encodeURIComponent(botLink || "https://t.me")}` +
-      `&text=${encodeURIComponent(`📖 ${g.gospel.label}\n\n${g.gospel.text}`.slice(0, 3000))}`;
+      `&text=${encoded}`;
     const markup = username
       ? { inline_keyboard: [[{ text: "📤 አጋራ", url: shareUrl }]] }
       : undefined;
