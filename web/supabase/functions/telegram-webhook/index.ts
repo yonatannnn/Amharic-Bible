@@ -1,10 +1,16 @@
-// Telegram bot webhook: subscribes/unsubscribes users who message the bot.
+// Telegram bot webhook: subscribes/unsubscribes users who message the bot,
+// and answers /today with the verse the daily broadcast last sent.
 //
 // Deploy:  supabase functions deploy telegram-webhook --no-verify-jwt
 // Secrets: TELEGRAM_BOT_TOKEN, TELEGRAM_WEBHOOK_SECRET
 // Then register the webhook (one curl — see the deploy notes).
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { tryRef } from "../_shared/auth.ts";
+
+function esc(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
 
 // deno-lint-ignore no-explicit-any
 async function reply(token: string, chatId: number, text: string, replyMarkup?: any) {
@@ -43,14 +49,43 @@ Deno.serve(async (req) => {
     if (!msg?.chat) return new Response("ok");
 
     const chat = msg.chat;
-    const text = (msg.text ?? "").trim().toLowerCase();
+    // "/today@SomeBot" (group chats) → "/today"
+    const text = (msg.text ?? "").trim().toLowerCase().replace(/^(\/\w+)@\w+/, "$1");
     const token = Deno.env.get("TELEGRAM_BOT_TOKEN")!;
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    if (text === "/stop" || text === "/unsubscribe") {
+    if (text === "/today") {
+      // Resend the verse the daily broadcast last sent (logged by telegram-verse).
+      const { data: last } = await supabase
+        .from("verse_history").select("book, chapter, verse")
+        .eq("channel", "telegram").order("used_at", { ascending: false })
+        .limit(1).maybeSingle();
+      const v = last ? await tryRef(last.book, last.chapter, last.verse) : null;
+      if (!v) {
+        await reply(token, chat.id, "Today's verse isn't out yet — check back soon 🙏");
+        return new Response("ok");
+      }
+      const botUser = await getBotUsername(token);
+      const botLink = botUser ? `https://t.me/${botUser}` : "";
+      const footer = botLink ? `\n\n<a href="${botLink}">የዕለቱ ቃል</a>` : "";
+      // Same cap as telegram-verse: long Amharic text overflows reply markup.
+      let shareText = `📖 ${v.ref}\n\n${v.text}`;
+      let encodedShare = encodeURIComponent(shareText);
+      if (encodedShare.length > 3000) {
+        shareText = shareText.slice(0, Math.floor((shareText.length * 3000) / encodedShare.length) - 1) + "…";
+        encodedShare = encodeURIComponent(shareText);
+      }
+      const shareUrl =
+        `https://t.me/share/url?url=${encodeURIComponent(botLink || "https://t.me")}` +
+        `&text=${encodedShare}`;
+      const replyMarkup = botUser
+        ? { inline_keyboard: [[{ text: "📤 Share verse", url: shareUrl }]] }
+        : undefined;
+      await reply(token, chat.id, `📖 <b>${esc(v.ref)}</b>\n\n${esc(v.text)}${footer}`, replyMarkup);
+    } else if (text === "/stop" || text === "/unsubscribe") {
       await supabase.from("telegram_subscribers").update({ active: false }).eq("chat_id", chat.id);
       await reply(token, chat.id, "Unsubscribed 🙏 Send /start anytime to get the verses again.");
     } else {
@@ -72,7 +107,7 @@ Deno.serve(async (req) => {
         : undefined;
 
       await reply(token, chat.id,
-        "✝️ <b>Welcome to Amharic Verses</b>\nYou'll receive the verse of the day here, refreshed through the day.\n\nSend /stop to unsubscribe." + footer,
+        "✝️ <b>Welcome to Amharic Verses</b>\nYou'll receive the verse of the day here, refreshed through the day.\n\nSend /today for today's verse, /stop to unsubscribe." + footer,
         replyMarkup);
     }
     return new Response("ok");
