@@ -15,6 +15,18 @@ build/
 # local DB backups (contain user data)
 backups/
 
-# nested repos keep their own history
-web/
+# Supabase CLI cache
+supabase/.temp/
+web/supabase/.temp/
+
+# Bible text: CC BY-NC-ND (bible81/LICENSE-DATA) or third-party — kept out of
+# this public repo. See README "Bible text" for how to restore it locally.
+bible81/data/
+mobile/assets/bible/
+web/public/bible/
+sinksar/
+web/public/sinksar/
+gitsawe/pdfs/
+
+# the retired Koyeb API lives in its own repo (yonatannnn/amharic-bible-api)
 amharic-bible-api/

@@ -12,12 +12,22 @@ every day, with chat, daily-chapter reading, and reminders.
 
 | Path | Stack | What it is |
 |------|-------|------------|
-| `amharic-bible-api/` | NestJS + TypeScript | Amharic Bible content API (66 books served from JSON). |
 | `web/` | Next.js (App Router) + TypeScript | The web app — auth, streaks, chat, reader, profile. |
-| `web/supabase/` | Postgres / Supabase | Schema, RLS, SQL migrations, and edge functions. |
+| `web/supabase/` | Postgres / Supabase | Schema, RLS, SQL migrations, and Edge Functions — including both Telegram bots (`telegram-verse`/`telegram-webhook`, `gitsawe-daily`/`gitsawe-webhook`). |
 | `mobile/` | Flutter | The native mobile app (same backend). |
-| `supabase/` | Supabase config | Project config. |
+| `bible81/` | Node (no deps) | Local EOTC 81-book Bible API and reference parser; source of the bundled Bible text. |
+| `gitsawe/` | Node | ግጻዌ lectionary pipeline: month tables → `gitsawe.json` for web, mobile and the bots. |
 | `SPEC.md` | — | Original product spec. |
+
+## Bible text
+
+The Bible text comes from [EOTCOpenSource/80-weahadu](https://github.com/EOTCOpenSource/80-weahadu)
+and is licensed **CC BY-NC-ND 4.0** (`bible81/LICENSE-DATA`), so it is not
+committed here. The same goes for the ስንክሳር text (`sinksar/`) and the
+lectionary PDFs (`gitsawe/pdfs/`). To build locally, put the upstream data in
+`bible81/data/` (pinned commit: `bible81/data/SOURCE-COMMIT.txt`), then run
+`node web/scripts/build-bible.mjs` to generate `web/public/bible/` and copy
+it to `mobile/assets/bible/` (the two must be identical).
 
 ## How it works
 
@@ -36,8 +46,8 @@ every day, with chat, daily-chapter reading, and reminders.
 Each sub-project has its own README and a `.env.local.example`. In short:
 
 ```bash
-# content API
-cd amharic-bible-api && npm install && npm run start:dev
+# Bible API (needs bible81/data — see "Bible text")
+cd bible81 && npm start
 
 # web app
 cd web && npm install && cp .env.local.example .env.local   # fill in Supabase keys
