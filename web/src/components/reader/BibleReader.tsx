@@ -14,6 +14,7 @@ import { SettingsPanel } from "./SettingsPanel";
 import { createClient } from "@/lib/supabase/client";
 import { ShareBar, type ShareFriend } from "./ShareBar";
 import { SavedDrawer } from "./SavedDrawer";
+import { verseRows } from "@/lib/verseRows";
 
 type View =
   | { kind: "welcome" }
@@ -596,13 +597,13 @@ function ChapterReader({
       </p>
 
       <div className="reader-text mt-5 text-ink">
-        {chap.verses.map((v, i) => {
-          const n = i + 1;
-          const selected = sel != null && n >= sel.start && n <= sel.end;
+        {verseRows(chap.verses).map((row) => {
+          const n = row.start;
+          const selected = sel != null && row.end >= sel.start && row.start <= sel.end;
           const isHl = highlighted.has(n);
           return (
             <div
-              key={i}
+              key={n}
               id={`v-${n}`}
               onClick={() => tapVerse(n)}
               className={`flex cursor-pointer gap-3 rounded-lg px-2 py-1 transition-colors [&.flash]:bg-brand-soft ${
@@ -618,9 +619,9 @@ function ChapterReader({
                   selected ? "text-brand-ink/70" : "text-gold/70"
                 }`}
               >
-                {n}
+                {row.label}
               </span>
-              <span className="flex-1">{v}</span>
+              <span className="flex-1">{row.text}</span>
             </div>
           );
         })}

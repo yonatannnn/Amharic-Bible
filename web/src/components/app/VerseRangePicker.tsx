@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getBook, type Book, type BookRef } from "@/lib/bible";
+import { verseRows } from "@/lib/verseRows";
 
 const bookCache = new Map<number, Book>();
 async function bookCached(n: number) {
@@ -102,22 +103,22 @@ export function VerseRangePicker({
             </p>
           ) : (
             <div className="reader-text">
-              {chap.verses.map((v, i) => {
-                const n = i + 1;
+              {verseRows(chap.verses).map((row) => {
+                const n = row.start;
                 const selected =
-                  start != null && end != null && n >= start && n <= end;
+                  start != null && end != null && row.end >= start && row.start <= end;
                 return (
                   <span
-                    key={i}
+                    key={n}
                     onClick={() => tapVerse(n)}
                     className={`cursor-pointer rounded-lg px-1 py-0.5 ${
                       selected ? "bg-brand text-white" : "hover:bg-surface-2"
                     }`}
                   >
                     <sup className="mr-1 select-none font-sans text-[0.7em] font-bold opacity-70">
-                      {n}
+                      {row.label}
                     </sup>
-                    {v}{" "}
+                    {row.text}{" "}
                   </span>
                 );
               })}

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import type { ResolvedRef, TodaysGitsawe } from "@/lib/gitsawe";
+import { foldNumbered } from "@/lib/verseRows";
 
 /**
  * One reading, laid out the way the daily chapter is: a centred heading, then
@@ -28,15 +29,15 @@ function Reading({ slot, r }: { slot: string; r: ResolvedRef }) {
       </div>
 
       <div className="mt-3.5">
-        {(r.verses ?? []).map((v) => (
+        {foldNumbered(r.verses ?? []).map((v) => (
           <p
-            key={v.n}
+            key={v.start}
             className="amharic mb-0.5 text-ink [font-family:var(--reader-font)] [line-height:var(--reader-leading)]"
           >
             <span className="mr-1 align-super text-[0.55em] font-extrabold text-gold/70">
-              {v.n}
+              {v.label}
             </span>
-            {v.t}
+            {v.text}
           </p>
         ))}
       </div>
