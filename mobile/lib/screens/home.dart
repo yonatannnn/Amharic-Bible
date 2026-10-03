@@ -15,6 +15,7 @@ import '../providers.dart';
 import 'verse_picker.dart';
 import 'admin_verse_picker.dart';
 import 'telegram_queue_page.dart';
+import '../services/bible.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -250,7 +251,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Widget _floatingBar(TodaysReading r) {
     final s = _selStart!, e = _selEnd!;
     final range = s == e ? '$s' : '$s-$e';
-    final text = r.verses.sublist(s - 1, e).join(' ');
+    final text = r.verses.sublist(s - 1, e).where((t) => t.trim().isNotEmpty).join(' ');
     final refLabel = '${r.bookName} ${r.chapter}:$range';
     return VerseShareBar(
       book: r.book, chapter: r.chapter, start: s, end: e, ref: refLabel, text: text,
@@ -457,15 +458,15 @@ class _ChapterCardState extends State<_ChapterCard> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              for (var i = 0; i < r.verses.length; i++)
+              for (final row in verseRows(r.verses))
                 VerseTile(
-                  n: i + 1,
-                  text: r.verses[i],
+                  label: row.label,
+                  text: row.text,
                   size: size,
                   selected: widget.selStart != null &&
-                      (i + 1) >= widget.selStart! &&
-                      (i + 1) <= widget.selEnd!,
-                  onTap: () => widget.onTapVerse(i + 1),
+                      row.end >= widget.selStart! &&
+                      row.start <= widget.selEnd!,
+                  onTap: () => widget.onTapVerse(row.start),
                 ),
             ],
           ),

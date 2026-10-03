@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../theme.dart';
 import '../services/gitsawe.dart';
 import 'verse_share.dart';
+import '../services/bible.dart';
 
 /// A selection inside one of the day's readings, handed up so the screen can
 /// show the shared [VerseShareBar] for it.
@@ -201,16 +202,16 @@ class GitsaweCardState extends State<GitsaweCard> {
           ]),
         ),
         const SizedBox(height: 14),
-        for (final v in r.verses)
+        for (final row in foldNumbered([for (final v in r.verses) (v.n, v.t)]))
           VerseTile(
-            n: v.n,
-            text: v.t,
+            label: row.label,
+            text: row.text,
             size: size,
             selected: _selKey == key &&
                 _selStart != null &&
-                v.n >= _selStart! &&
-                v.n <= _selEnd!,
-            onTap: () => _tapVerse(r, v.n),
+                row.end >= _selStart! &&
+                row.start <= _selEnd!,
+            onTap: () => _tapVerse(r, row.start),
           ),
       ]),
     );

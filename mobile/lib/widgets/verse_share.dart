@@ -10,14 +10,14 @@ import '../screens/verse_image.dart';
 /// One selectable verse with a superscript number. Shared by Home + Reader so
 /// the reading experience is identical everywhere.
 class VerseTile extends StatelessWidget {
-  final int n;
+  final String label;
   final String text;
   final double size;
   final bool selected;
   final VoidCallback onTap;
   const VerseTile({
     super.key,
-    required this.n,
+    required this.label,
     required this.text,
     required this.size,
     required this.selected,
@@ -47,7 +47,7 @@ class VerseTile extends StatelessWidget {
               alignment: PlaceholderAlignment.top,
               child: Padding(
                 padding: const EdgeInsets.only(right: 5, top: 1),
-                child: Text('$n',
+                child: Text(label,
                     style: TextStyle(
                       fontSize: size * 0.54,
                       color: selected ? c.brand : c.gold.withValues(alpha: 0.7),

@@ -77,7 +77,7 @@ class _VersePickerScreenState extends ConsumerState<VersePickerScreen> {
     final c = colorsOf(context);
     final verses = _bookData!.chapters[_chapter! - 1].verses;
     final s = _selStart!, e = _selEnd!;
-    final text = verses.sublist(s - 1, e).join(' ');
+    final text = verses.sublist(s - 1, e).where((t) => t.trim().isNotEmpty).join(' ');
     final refLabel = '${_bookData!.title} $_chapter:${s == e ? '$s' : '$s-$e'}';
     final allFriends = ref.read(friendsProvider).asData?.value ?? [];
     final others = allFriends.where((f) => f.friendshipId != widget.friendshipId).toList();
@@ -258,13 +258,13 @@ class _VersePickerScreenState extends ConsumerState<VersePickerScreen> {
                 style: TextStyle(color: c.inkFaint, fontSize: 10, letterSpacing: 0.8, fontWeight: FontWeight.w600)),
           ]),
           const SizedBox(height: 18),
-          for (var i = 0; i < verses.length; i++)
+          for (final row in verseRows(verses))
             VerseTile(
-              n: i + 1,
-              text: verses[i],
+              label: row.label,
+              text: row.text,
               size: size,
-              selected: hasSel && (i + 1) >= _selStart! && (i + 1) <= _selEnd!,
-              onTap: () => _tapVerse(i + 1),
+              selected: hasSel && row.end >= _selStart! && row.start <= _selEnd!,
+              onTap: () => _tapVerse(row.start),
             ),
         ],
       ),
@@ -279,7 +279,7 @@ class _VersePickerScreenState extends ConsumerState<VersePickerScreen> {
   Widget _sendBar(AppColors c, List<String> verses, String bookTitle) {
     final s = _selStart!, e = _selEnd!;
     final range = s == e ? '$s' : '$s-$e';
-    final text = verses.sublist(s - 1, e).join(' ');
+    final text = verses.sublist(s - 1, e).where((t) => t.trim().isNotEmpty).join(' ');
     return Container(
       margin: const EdgeInsets.all(14),
       padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),

@@ -434,7 +434,7 @@ class _VerseBubbleState extends State<_VerseBubble> {
       final ch = b.chapters[(widget.msg['chapter'] as int) - 1];
       final s = (widget.msg['verse_start'] as int) - 1;
       final e = (widget.msg['verse_end'] as int? ?? widget.msg['verse_start'] as int) - 1;
-      if (mounted) setState(() => _text = ch.verses.sublist(s, e + 1).join(' '));
+      if (mounted) setState(() => _text = ch.verses.sublist(s, e + 1).where((t) => t.trim().isNotEmpty).join(' '));
     } catch (_) {
       if (mounted) setState(() => _text = '…');
     }

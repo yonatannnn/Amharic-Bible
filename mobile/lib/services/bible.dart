@@ -10,6 +10,45 @@ import 'package:flutter/services.dart' show rootBundle;
 /// Psalms use LXX numbering — see web/supabase/migration_eotc81_renumber.sql.
 /// Fully offline: no network calls, no external content API.
 
+/// A display row of the reading view. Where the am-2000 source lost a verse
+/// boundary (the "empty verse" gaps — the text of verse N+1 sits inside verse
+/// N), the row spans both numbers and is labelled "N-N+1" instead of showing
+/// a bare number with no text.
+class VerseRow {
+  final int start;
+  final int end;
+  final String text;
+  const VerseRow(this.start, this.end, this.text);
+  String get label => start == end ? '$start' : '$start-$end';
+}
+
+/// Fold a numbered verse list into display rows: a verse with text absorbs the
+/// empty verses that follow it; empty verses at the very start fold into the
+/// first verse with text.
+List<VerseRow> foldNumbered(List<(int, String)> verses) {
+  final rows = <VerseRow>[];
+  int? start;
+  for (final (n, t) in verses) {
+    start ??= n;
+    if (t.trim().isEmpty) {
+      if (rows.isNotEmpty && start == n) {
+        final last = rows.removeLast();
+        rows.add(VerseRow(last.start, n, last.text));
+        start = null;
+      }
+      // else: leading empty — keep [start] and wait for the next text verse.
+    } else {
+      rows.add(VerseRow(start, n, t));
+      start = null;
+    }
+  }
+  return rows;
+}
+
+/// [foldNumbered] for a chapter's verses, numbered 1..N.
+List<VerseRow> verseRows(List<String> verses) =>
+    foldNumbered([for (var i = 0; i < verses.length; i++) (i + 1, verses[i])]);
+
 class BookRef {
   final int num;
   final String name;

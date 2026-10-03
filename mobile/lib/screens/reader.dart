@@ -209,13 +209,13 @@ class _ReaderScreenState extends State<ReaderScreen> {
                 style: TextStyle(color: c.inkFaint, fontSize: 10, letterSpacing: 0.8, fontWeight: FontWeight.w600)),
           ]),
           const SizedBox(height: 18),
-          for (var i = 0; i < verses.length; i++)
+          for (final row in verseRows(verses))
             VerseTile(
-              n: i + 1,
-              text: verses[i],
+              label: row.label,
+              text: row.text,
               size: size,
-              selected: hasSel && (i + 1) >= _selStart! && (i + 1) <= _selEnd!,
-              onTap: () => _tapVerse(i + 1),
+              selected: hasSel && row.end >= _selStart! && row.start <= _selEnd!,
+              onTap: () => _tapVerse(row.start),
             ),
           const SizedBox(height: 24),
           Row(children: [
@@ -237,7 +237,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
           child: SafeArea(child: Builder(builder: (_) {
             final s = _selStart!, e = _selEnd!;
             final range = s == e ? '$s' : '$s-$e';
-            final text = verses.sublist(s - 1, e).join(' ');
+            final text = verses.sublist(s - 1, e).where((t) => t.trim().isNotEmpty).join(' ');
             final ref = '$bookTitle $_chapter:$range';
             return VerseShareBar(
               book: _book!, chapter: _chapter!, start: s, end: e, ref: ref, text: text,
